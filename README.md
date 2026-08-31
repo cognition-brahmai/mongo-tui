@@ -4,6 +4,10 @@ MongoTUI is a keyboard-first terminal workspace for MongoDB. It is built for SSH
 
 The interface is designed around Compass-style exploration without requiring a graphical desktop: connect, browse namespaces, run find queries, inspect BSON documents, and move quickly between results using either keyboard controls or terminal mouse support.
 
+## Landing Page
+
+The dependency-free landing page lives in [`site/`](site/). Open [`site/index.html`](site/index.html) directly in a browser during development, or deploy that directory to any static host.
+
 ## Current Capabilities
 
 | Area | Available now |
