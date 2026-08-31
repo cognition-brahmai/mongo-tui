@@ -1,0 +1,256 @@
+Screen {
+    background: $surface;
+    color: $text;
+}
+
+Header {
+    dock: top;
+}
+
+Footer {
+    dock: bottom;
+}
+
+.pane-title,
+.dialog-title {
+    color: $text;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.field-label {
+    color: $text-muted;
+    margin-top: 1;
+}
+
+.error {
+    color: $error;
+}
+
+#connection-layout {
+    height: 1fr;
+    padding: 1 2;
+}
+
+#saved-profiles-pane {
+    width: 1fr;
+    min-width: 30;
+    margin-right: 1;
+}
+
+#profiles-table {
+    height: 1fr;
+    border: round $primary;
+}
+
+#profile-help,
+#credential-note {
+    color: $text-muted;
+    margin-top: 1;
+}
+
+#connection-form {
+    width: 2fr;
+    min-width: 42;
+    border: round $primary;
+    padding: 1 2;
+}
+
+#connection-actions {
+    height: auto;
+    margin-top: 2;
+}
+
+#connection-actions Button {
+    margin-right: 1;
+}
+
+#connection-status {
+    margin-top: 1;
+    min-height: 3;
+}
+
+#connection-banner {
+    height: 1;
+    padding: 0 1;
+    color: $text-muted;
+    background: $panel;
+}
+
+#browser-layout {
+    height: 1fr;
+}
+
+#namespace-pane {
+    width: 32;
+    min-width: 24;
+    border-right: solid $primary;
+    padding: 1;
+}
+
+#namespace-tree {
+    height: 1fr;
+}
+
+#collection-pane {
+    width: 1fr;
+    padding: 1;
+}
+
+#collection-title {
+    height: 1;
+    color: $text;
+    text-style: bold;
+}
+
+#query-row {
+    height: auto;
+    margin-top: 1;
+}
+
+#filter-input {
+    width: 1fr;
+    margin-right: 1;
+}
+
+#query-row Button {
+    margin-left: 1;
+}
+
+#query-status {
+    height: 2;
+    color: $text-muted;
+}
+
+#result-layout {
+    height: 1fr;
+}
+
+#documents-table {
+    width: 3fr;
+    height: 1fr;
+    border: round $primary;
+}
+
+#inspector-pane {
+    width: 2fr;
+    height: 1fr;
+    margin-left: 1;
+}
+
+#inspector-hint {
+    height: 1;
+    color: $text-muted;
+}
+
+#document-inspector {
+    width: 1fr;
+    height: 1fr;
+    padding: 1;
+    border: round $secondary;
+}
+
+#document-inspector:focus,
+#full-document-json:focus {
+    border: round $accent;
+}
+
+#pager {
+    height: auto;
+    margin-top: 1;
+}
+
+#pager Button {
+    margin-right: 1;
+}
+
+#query-options-dialog,
+#document-dialog,
+#theme-picker-dialog {
+    width: 76;
+    max-width: 96%;
+    height: auto;
+    max-height: 90%;
+    margin: 4 8;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
+.integer-options {
+    height: auto;
+}
+
+.integer-options > Vertical {
+    width: 1fr;
+    margin-right: 1;
+}
+
+#query-options-actions,
+#document-actions,
+#theme-picker-actions {
+    height: auto;
+    margin-top: 1;
+}
+
+#query-options-actions Button,
+#document-actions Button,
+#theme-picker-actions Button {
+    margin-right: 1;
+}
+
+#options-status {
+    color: $text-muted;
+    min-height: 2;
+    margin-top: 1;
+}
+
+#theme-current,
+#theme-picker-help {
+    color: $text-muted;
+}
+
+#theme-list {
+    height: 1fr;
+    margin-top: 1;
+    border: round $secondary;
+}
+
+#theme-picker-help {
+    min-height: 2;
+    margin-top: 1;
+}
+
+#full-document-json {
+    height: 1fr;
+    border: round $secondary;
+    padding: 1;
+}
+
+Screen.-narrow #namespace-pane {
+    display: none;
+}
+
+Screen.-narrow #inspector-pane {
+    display: none;
+}
+
+Screen.-narrow #documents-table {
+    width: 1fr;
+}
+
+Screen.-narrow #saved-profiles-pane {
+    display: none;
+}
+
+Screen.-narrow #connection-form {
+    width: 1fr;
+    min-width: 0;
+}
+
+Screen.-narrow #query-options-dialog,
+Screen.-narrow #document-dialog,
+Screen.-narrow #theme-picker-dialog {
+    width: 94%;
+    margin: 1 1;
+}
