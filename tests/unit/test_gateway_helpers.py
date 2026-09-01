@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mongotui.services.mongo_gateway import (
+from mongrove.services.mongo_gateway import (
     MongoGatewayError,
     PyMongoGateway,
     redact_connection_uri,

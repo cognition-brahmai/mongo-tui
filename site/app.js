@@ -1,11 +1,11 @@
-const themeNames = {
-  night: "Mongo Night",
-  forest: "Emerald Forest",
-  ocean: "Midnight Ocean",
-  paper: "Mongo Paper",
+const themeLabels = {
+  night: "Grove Night",
+  evergreen: "Evergreen",
+  blue: "Blue Hour",
+  paper: "Field Notes",
 };
 
-const copyText = async (text) => {
+async function copyText(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
     return;
@@ -20,7 +20,7 @@ const copyText = async (text) => {
   fallback.select();
   document.execCommand("copy");
   fallback.remove();
-};
+}
 
 document.querySelectorAll("[data-copy-target]").forEach((button) => {
   button.addEventListener("click", async () => {
@@ -41,21 +41,21 @@ document.querySelectorAll("[data-copy-target]").forEach((button) => {
   });
 });
 
-const preview = document.querySelector(".theme-preview");
-const previewName = document.getElementById("theme-name");
+const themePreview = document.querySelector(".theme-demo");
+const themeLabel = document.getElementById("theme-label");
 
-document.querySelectorAll(".theme-chip").forEach((button) => {
-  button.addEventListener("click", () => {
-    const theme = button.dataset.theme;
-    if (!preview || !theme || !themeNames[theme]) return;
+document.querySelectorAll(".theme-choice").forEach((choice) => {
+  choice.addEventListener("click", () => {
+    const theme = choice.dataset.theme;
+    if (!themePreview || !theme || !themeLabels[theme]) return;
 
-    preview.dataset.previewTheme = theme;
-    previewName.textContent = themeNames[theme];
+    themePreview.dataset.themePreview = theme;
+    themeLabel.textContent = themeLabels[theme];
 
-    document.querySelectorAll(".theme-chip").forEach((chip) => {
-      const selected = chip === button;
-      chip.classList.toggle("active", selected);
-      chip.setAttribute("aria-pressed", String(selected));
+    document.querySelectorAll(".theme-choice").forEach((button) => {
+      const selected = button === choice;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-pressed", String(selected));
     });
   });
 });

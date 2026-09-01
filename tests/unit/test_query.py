@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from bson import ObjectId
 
-from mongotui.domain.query import QueryFormState, QueryValidationError, parse_find_query
+from mongrove.domain.query import QueryFormState, QueryValidationError, parse_find_query
 
 
 def test_parse_find_query_accepts_extended_json_and_options() -> None:

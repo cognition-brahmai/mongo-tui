@@ -1,134 +1,113 @@
-# MongoTUI
+# Mongrove
 
-MongoTUI is a keyboard-first terminal workspace for MongoDB. It is built for SSH sessions, Ubuntu servers, jump hosts, and other environments where MongoDB Compass is unavailable or impractical.
+**Mongrove** is a keyboard-first MongoDB workspace for SSH sessions, servers, jump hosts, and every environment where MongoDB Compass cannot go.
 
-The interface is designed around Compass-style exploration without requiring a graphical desktop: connect, browse namespaces, run find queries, inspect BSON documents, and move quickly between results using either keyboard controls or terminal mouse support.
+It keeps the useful structure of a database GUI inside the terminal: namespaces on the left, query controls above, document results in the middle, and BSON-aware inspection beside them.
 
-## Landing Page
+**Website:** [mongrove.oss.brahmai.in](https://mongrove.oss.brahmai.in)
 
-The dependency-free landing page lives in [`site/`](site/). Open [`site/index.html`](site/index.html) directly in a browser during development, or deploy that directory to any static host.
+## Install
 
-## Current Capabilities
+```bash
+pip install mongrove
+```
+
+Launch the workspace:
+
+```bash
+mongrove
+```
+
+Connect directly to a deployment:
+
+```bash
+mongrove mongodb://localhost:27017
+```
+
+For a production exploration session, start in interface read-only mode:
+
+```bash
+mongrove --read-only
+```
+
+`--read-only` is an interface safeguard. MongoDB server-side roles remain the security boundary. Use a least-privilege `read` user to enforce true production read-only access.
+
+## What It Does Today
 
 | Area | Available now |
 | --- | --- |
-| Connections | MongoDB URI connection testing, saved endpoint profiles, connection diagnostics, and disconnect/reconnect workflow. |
+| Connections | URI connection testing, named endpoint profiles, diagnostics, and reconnect/disconnect flow. |
 | Privacy | Saved profiles remove URI credentials before writing local files. |
-| Navigation | Database and collection tree with lazy collection loading. |
+| Navigation | Lazy database and collection tree navigation. |
 | Documents | Bounded result pages, dynamic table columns, BSON-aware JSON inspection, and a full-document modal. |
 | Queries | JSON/Extended JSON filter, projection, sort, collation, skip, limit, and `maxTimeMS`. |
-| Themes | Four MongoTUI themes plus curated Textual themes, keyboard picker, CLI selection, and saved preference. |
-| Input | Keyboard-first operation with optional click, repeated-click, header-sort, wheel-scroll, and pointer support. |
+| Themes | Four Mongrove themes, curated Textual themes, a keyboard picker, and saved preference. |
+| Input | Keyboard-first workflows with optional mouse click, wheel, and header-sort support. |
 
-The current application is intentionally read-only. Write operations, aggregation editing, schema analysis, indexes, validation, import/export, and live performance monitoring are planned next. See [MONGOTUI_PLAN.md](MONGOTUI_PLAN.md) for the complete product plan.
+The current release focuses on safe read-only exploration. Write workflows, aggregation editing, schema analysis, index management, validation, import/export, and live performance monitoring are planned next.
 
-## Quick Start
+## First Session
 
-This repository uses the supplied Conda environment at `.conda_env`.
-
-```powershell
-.\.conda_env\python.exe -m pip install -e ".[dev]"
-.\.conda_env\python.exe -m mongotui
-```
-
-Connect directly to a local server:
-
-```powershell
-.\.conda_env\python.exe -m mongotui mongodb://localhost:27017
-```
-
-Open a specific namespace after connecting:
-
-```powershell
-.\.conda_env\python.exe -m mongotui mongodb://localhost:27017 --database app --collection users
-```
-
-Use the read-only interface mode for production exploration:
-
-```powershell
-.\.conda_env\python.exe -m mongotui --read-only
-```
-
-`--read-only` hides write-oriented UI controls as they are introduced. MongoDB roles are still the security boundary; use a server-side `read` role to enforce real production read-only access.
-
-## First Workflow
-
-1. Start MongoTUI and enter a MongoDB URI.
+1. Start `mongrove`, then enter a MongoDB URI.
 2. Choose **Test and Connect** or press `Ctrl+Enter`.
-3. Move through the namespace tree using arrow keys.
+3. Move through the namespace tree with arrow keys.
 4. Press `Space` to expand a database and `Enter` to open a collection.
 5. Enter a JSON or Extended JSON filter and press `F5` or `Enter`.
 6. Use arrow keys to inspect result rows.
 7. Press `Tab` to focus the JSON viewer, then use arrows, `PgUp`, `PgDn`, `Home`, or `End` to scroll long documents.
-8. Press `Enter` on a result row to open the full BSON-aware document viewer.
-
-## Themes
-
-Press `Ctrl+T` anywhere in MongoTUI to open the theme picker. Use arrow keys and `Enter`, or click a theme with the mouse. Selections made in the picker are saved in MongoTUI's local `settings.json` and used on the next launch.
-
-| Theme | Style |
-| --- | --- |
-| Mongo Night | Default deep-charcoal theme with MongoDB green accents. |
-| Emerald Forest | Low-glare green palette for long server sessions. |
-| Midnight Ocean | Navy background with cyan focus states. |
-| Mongo Paper | Warm high-contrast light mode. |
-| Dracula | Familiar purple dark palette. |
-| Nord | Cool arctic dark palette. |
-| Solarized Dark / Light | Low-contrast palettes for dark or bright environments. |
-| Gruvbox | Warm retro dark palette. |
-| ANSI Dark / Light | 16-color fallbacks for limited terminal emulators. |
-
-Choose a theme for a single launch with `--theme`:
-
-```powershell
-.\.conda_env\python.exe -m mongotui --theme mongotui-ocean
-```
-
-Available CLI values are:
-
-```text
-mongotui-night
-mongotui-forest
-mongotui-ocean
-mongotui-paper
-dracula
-nord
-solarized-dark
-solarized-light
-gruvbox
-ansi-dark
-ansi-light
-```
+8. Press `Enter` on a result row to open its full BSON-aware document viewer.
 
 ## Query Examples
 
-MongoTUI accepts JSON and MongoDB Extended JSON in the filter input.
-
-Find active users:
+Mongrove accepts JSON and MongoDB Extended JSON in the filter input.
 
 ```json
 { "status": "active" }
 ```
 
-Find one document by ObjectId:
-
 ```json
 { "_id": { "$oid": "65ba0aa00000000000000001" } }
 ```
 
-Open query options with `O` to set projection, sort, collation, skip, limit, and maximum server execution time. Leave Limit empty, or set it to `0`, to retain normal bounded UI pagination across all matching documents.
-
-Example sort option:
+Press `O` to set projection, sort, collation, skip, limit, and maximum server execution time. Leave Limit empty, or set it to `0`, to retain bounded result pages across all matching documents.
 
 ```json
 { "createdAt": -1, "_id": 1 }
 ```
 
-MongoTUI fetches one page plus one extra document to detect whether a next page exists. It does not automatically materialize an entire collection or run an expensive exact count.
+Mongrove fetches one page plus one extra document to determine whether a next page exists. It does not automatically materialize a full collection or run an expensive exact count.
 
-## Keyboard and Mouse Controls
+## Themes
 
-| Key | Action |
+Press `Ctrl+T` anywhere in Mongrove to open the theme picker. Choose a theme with arrow keys and `Enter`, or click it when mouse reporting is available. Picker selections are saved in local `settings.json` for the next launch.
+
+| Theme | Style |
+| --- | --- |
+| Grove Night | Default deep-charcoal theme with bright green focus states. |
+| Evergreen | Low-glare green palette for long server sessions. |
+| Blue Hour | Navy foundation with cyan focus states. |
+| Field Notes | Warm high-contrast light mode. |
+| Dracula, Nord, Solarized, Gruvbox | Curated familiar Textual themes. |
+| ANSI Dark / Light | 16-color fallbacks for limited terminal emulators. |
+
+Choose a theme for one launch with `--theme`:
+
+```bash
+mongrove --theme mongrove-ocean
+```
+
+Available Mongrove theme IDs:
+
+```text
+mongrove-night
+mongrove-forest
+mongrove-ocean
+mongrove-paper
+```
+
+## Keyboard and Mouse
+
+| Control | Action |
 | --- | --- |
 | Arrow keys | Navigate the focused tree, table, option list, or JSON viewer. |
 | `Space` | Expand or collapse the focused database tree node. |
@@ -140,47 +119,48 @@ MongoTUI fetches one page plus one extra document to detect whether a next page 
 | `Ctrl+T` | Open the theme picker. |
 | `Ctrl+D` | Disconnect. |
 | `Ctrl+P` | Open Textual's command palette. |
-| `Ctrl+Q` | Quit MongoTUI. |
-| `Esc` | Close the current modal or cancel the current operation. |
+| `Ctrl+Q` | Quit Mongrove. |
+| `Esc` | Close the current modal or cancel the current action. |
 
-Terminal mouse interactions are optional enhancements. Click to focus or activate controls, repeat-click a result row to open it, click a column header to sort, and use the mouse wheel over the JSON viewer to scroll. Keyboard controls remain complete when mouse reporting is unavailable over SSH, tmux, screen, or a restricted terminal.
+Mouse behavior is an enhancement, never a requirement. Click to focus or activate controls, click table headers to sort, repeat-click a row to open it, and use the wheel over the JSON viewer to scroll. The keyboard path remains complete over SSH, tmux, GNU screen, and terminals with mouse reporting disabled.
 
 ## Configuration and Security
 
-MongoTUI stores local files in the platform configuration directory by default:
+Mongrove stores non-secret local state in the platform configuration directory:
 
 ```text
-connections.json   Saved connection endpoints without URI credentials
+connections.json   Saved endpoints with URI credentials removed
 settings.json      Theme preference and future non-secret UI settings
 ```
 
-Use `--config-dir` to keep this state in a different directory:
+Use `--config-dir` to keep this state elsewhere:
 
-```powershell
-.\.conda_env\python.exe -m mongotui --config-dir C:\secure\mongotui
+```bash
+mongrove --config-dir /secure/mongrove
 ```
 
 Security guidance:
 
-- MongoTUI does not persist URI passwords in saved profiles.
-- Avoid passwords in command-line arguments because they can appear in process listings or shell history.
-- Prefer a short-lived URI prompt, environment-specific secret injection, or a least-privilege MongoDB user for server access.
-- Saved query history is planned but not currently stored.
-- Do not treat document exports, once implemented, as backups. Use MongoDB backup tooling for backup and restore workflows.
+- Mongrove does not persist URI passwords in saved profiles.
+- Avoid passwords in command-line arguments because they can appear in process listings and shell history.
+- Prefer a short-lived prompt, secret injection, or a least-privilege MongoDB user.
+- Do not treat future data exports as backups. Use MongoDB backup tooling for backup and restore workflows.
 
 ## Development
 
-Run the full test suite through the supplied Conda environment:
+The repository includes a Conda environment at `.conda_env` for development on this workspace.
 
 ```powershell
+.\.conda_env\python.exe -m pip install -e ".[dev]"
 .\.conda_env\python.exe -m pytest -q -p no:cacheprovider
 ```
 
-The project uses:
+Run the package directly from source:
 
-- Python 3.10+.
-- Textual for the terminal UI, focus management, themes, workers, and tests.
-- PyMongo for MongoDB connectivity and BSON support.
-- Rich, bundled through Textual, for syntax-aware terminal rendering.
+```powershell
+.\.conda_env\python.exe -m mongrove
+```
 
-The package layout keeps MongoDB calls behind a synchronous gateway invoked from Textual workers. UI tests use a fake gateway, so core workflows can be tested without a running MongoDB server.
+The public landing page source lives in [`site/`](site/). It is dependency-free and deploys to [mongrove.oss.brahmai.in](https://mongrove.oss.brahmai.in).
+
+For the complete product, UX, safety, and delivery specification, read [MONGROVE_PLAN.md](MONGROVE_PLAN.md).

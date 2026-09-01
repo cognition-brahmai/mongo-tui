@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mongotui.cli import build_parser
+from mongrove.cli import build_parser
 
 
 def test_cli_parses_startup_options() -> None:
@@ -16,7 +16,7 @@ def test_cli_parses_startup_options() -> None:
             "--read-only",
             "--no-history",
             "--theme",
-            "mongotui-ocean",
+            "mongrove-ocean",
         ]
     )
 
@@ -25,4 +25,4 @@ def test_cli_parses_startup_options() -> None:
     assert args.collection == "customers"
     assert args.read_only is True
     assert args.no_history is True
-    assert args.theme == "mongotui-ocean"
+    assert args.theme == "mongrove-ocean"

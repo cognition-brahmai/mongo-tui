@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mongotui"
+name = "mongrove"
 version = "0.1.0"
 description = "A keyboard-first terminal user interface for MongoDB"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-  { name = "MongoTUI contributors" },
+  { name = "Mongrove contributors" },
 ]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
@@ -36,7 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-mongotui = "mongotui.cli:main"
+mongrove = "mongrove.cli:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -49,4 +49,4 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-mongotui = ["ui/styles/*.tcss"]
+mongrove = ["ui/styles/*.tcss"]

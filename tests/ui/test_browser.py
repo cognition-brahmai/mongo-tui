@@ -5,12 +5,12 @@ from __future__ import annotations
 import pytest
 from textual.widgets import DataTable, Input, Tree
 
-from mongotui.services.profile_store import ProfileStore
-from mongotui.ui.app import MongoTUIApp
-from mongotui.ui.screens.browser import BrowserScreen
-from mongotui.ui.screens.connection import ConnectionScreen
-from mongotui.ui.widgets.document_table import DocumentTable
-from mongotui.ui.widgets.document_viewer import DocumentJsonViewer
+from mongrove.services.profile_store import ProfileStore
+from mongrove.ui.app import MongroveApp
+from mongrove.ui.screens.browser import BrowserScreen
+from mongrove.ui.screens.connection import ConnectionScreen
+from mongrove.ui.widgets.document_table import DocumentTable
+from mongrove.ui.widgets.document_viewer import DocumentJsonViewer
 
 from tests.conftest import FakeGateway
 
@@ -25,7 +25,7 @@ async def _settle(pilot) -> None:
 @pytest.mark.asyncio
 async def test_connect_then_open_collection_and_query_documents(tmp_path) -> None:
     gateway = FakeGateway()
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=gateway,
         profile_store=ProfileStore(tmp_path / "connections.json"),
     )
@@ -56,7 +56,7 @@ async def test_connect_then_open_collection_and_query_documents(tmp_path) -> Non
 
 @pytest.mark.asyncio
 async def test_query_options_validate_before_returning_to_browser(tmp_path) -> None:
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=FakeGateway(),
         profile_store=ProfileStore(tmp_path / "connections.json"),
     )
@@ -83,7 +83,7 @@ async def test_query_options_validate_before_returning_to_browser(tmp_path) -> N
 
 @pytest.mark.asyncio
 async def test_empty_document_table_ignores_header_clicks(tmp_path) -> None:
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=FakeGateway(),
         profile_store=ProfileStore(tmp_path / "connections.json"),
     )
@@ -109,7 +109,7 @@ async def test_empty_document_table_ignores_header_clicks(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_populated_document_table_accepts_header_clicks(tmp_path) -> None:
     gateway = FakeGateway()
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=gateway,
         profile_store=ProfileStore(tmp_path / "connections.json"),
     )
@@ -141,7 +141,7 @@ async def test_document_inspector_scrolls_with_keyboard(tmp_path) -> None:
     gateway.documents[0]["large_payload"] = {
         f"field_{index:03}": f"Value {index}" for index in range(100)
     }
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=gateway,
         profile_store=ProfileStore(tmp_path / "connections.json"),
     )

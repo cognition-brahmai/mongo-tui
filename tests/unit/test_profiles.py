@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from mongotui.domain.connection import ConnectionProfile
-from mongotui.services.profile_store import ProfileStore
+from mongrove.domain.connection import ConnectionProfile
+from mongrove.services.profile_store import ProfileStore
 
 
 def test_profile_store_never_writes_uri_credentials(tmp_path) -> None:

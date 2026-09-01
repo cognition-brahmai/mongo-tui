@@ -1,4 +1,4 @@
-"""Shared fake services for MongoTUI tests."""
+"""Shared fake services for Mongrove tests."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ from typing import Any
 
 from bson import ObjectId
 
-from mongotui.domain.connection import ConnectionInfo
-from mongotui.domain.namespace import CollectionInfo
-from mongotui.domain.query import FindQuery
-from mongotui.services.mongo_gateway import DocumentsPage
+from mongrove.domain.connection import ConnectionInfo
+from mongrove.domain.namespace import CollectionInfo
+from mongrove.domain.query import FindQuery
+from mongrove.services.mongo_gateway import DocumentsPage
 
 
 class FakeGateway:
