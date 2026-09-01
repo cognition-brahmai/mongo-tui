@@ -6,7 +6,7 @@ This log records the feature branches merged into `dev`. Each feature is impleme
 | --- | --- | --- |
 | Mongrove rename baseline | `dev` | Complete |
 | Connection aliases and environment safeguards | `feature/connection-safety` | Complete |
-| Query history | `feature/query-history` | Planned |
+| Query history | `feature/query-history` | Complete |
 | Command palette actions | `feature/command-palette` | Planned |
 | Confirmed document writes | `feature/confirmed-writes` | Planned |
 | Export | `feature/export` | Planned |
@@ -20,3 +20,4 @@ This log records the feature branches merged into `dev`. Each feature is impleme
 
 - 2026-09-01: Created `dev` and committed the tested Mongrove rename baseline (`e74838c`).
 - 2026-09-01: Added aliases, persisted environment labels, CLI/environment startup resolution, production safety indicators, and a central session policy on `feature/connection-safety`.
+- 2026-09-01: Added bounded, target-scoped SQLite query history with search, restore, favorites, naming, copy, deletion, and `--no-history` enforcement on `feature/query-history`.

@@ -58,6 +58,7 @@ Supported environment settings are `MONGROVE_URI`, `MONGROVE_PROFILE`, `MONGROVE
 | Navigation | Lazy database and collection tree navigation. |
 | Documents | Bounded result pages, dynamic table columns, BSON-aware JSON inspection, and a full-document modal. |
 | Queries | JSON/Extended JSON filter, projection, sort, collation, skip, limit, and `maxTimeMS`. |
+| History | Bounded per-target query history with search, names, favorites, filter copy, deletion, and safe full-state restore. |
 | Themes | Four Mongrove themes, curated Textual themes, a keyboard picker, and saved preference. |
 | Input | Keyboard-first workflows with optional mouse click, wheel, and header-sort support. |
 
@@ -93,6 +94,12 @@ Press `O` to set projection, sort, collation, skip, limit, and maximum server ex
 ```
 
 Mongrove fetches one page plus one extra document to determine whether a next page exists. It does not automatically materialize a full collection or run an expensive exact count.
+
+## Query History
+
+Press `Ctrl+R` in a collection workspace to search and restore prior successful manual queries. Mongrove stores the complete find form, including filter, projection, sort, collation, pagination, and maximum execution time. Loading a saved entry does not execute it until you press `F5` or **Run**.
+
+History is scoped to a hashed credential-free connection target and namespace. It retains 30 recent non-favorite queries per namespace and at most 1,000 non-favorite entries overall. Favorites are preserved until you remove them. Query filters can contain sensitive values, so use `--no-history` or `MONGROVE_NO_HISTORY=true` whenever local persistence is inappropriate.
 
 ## Themes
 
@@ -132,6 +139,7 @@ mongrove-paper
 | `Tab` / `Shift+Tab` | Move focus between controls and into the JSON viewer. |
 | `F5` | Run the current query or refresh namespaces. |
 | `O` | Open query options. |
+| `Ctrl+R` | Search and restore local query history for the current collection. |
 | `[` / `]` | Previous and next query result page. |
 | `Ctrl+T` | Open the theme picker. |
 | `Ctrl+D` | Disconnect. |

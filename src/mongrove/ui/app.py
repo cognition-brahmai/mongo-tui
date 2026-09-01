@@ -11,6 +11,7 @@ from mongrove.domain.connection import ConnectionInfo
 from mongrove.domain.session import SessionPolicy, normalize_environment
 from mongrove.services.mongo_gateway import MongoGateway, PyMongoGateway
 from mongrove.services.profile_store import ProfileStore
+from mongrove.services.query_history import QueryHistory, QueryHistoryStore, target_id_for_uri
 from mongrove.services.settings_store import SettingsStore, SettingsStoreError
 from mongrove.ui.themes import (
     CURATED_THEME_NAMES,
@@ -38,6 +39,7 @@ class MongroveApp(App[None]):
         gateway: MongoGateway | None = None,
         profile_store: ProfileStore | None = None,
         settings_store: SettingsStore | None = None,
+        history_store: QueryHistoryStore | None = None,
         startup_uri: str | None = None,
         startup_profile: str | None = None,
         startup_database: str | None = None,
@@ -56,6 +58,11 @@ class MongroveApp(App[None]):
         )
         self.settings_store = settings_store or SettingsStore(
             config_dir / "settings.json" if config_dir else None
+        )
+        self.query_history = QueryHistory(
+            history_store
+            or QueryHistoryStore(config_dir / "history.sqlite3" if config_dir else None),
+            enabled=not no_history,
         )
         for theme in CUSTOM_THEMES:
             self.register_theme(theme)
@@ -116,6 +123,14 @@ class MongroveApp(App[None]):
             labels.insert(0, f"ALIAS {self.connection_alias}")
         labels.append(self.session_policy.write_mode_label)
         return " | ".join(labels)
+
+    @property
+    def history_target_id(self) -> str | None:
+        """Return the credential-free target ID used to scope local history."""
+
+        if self.connection_info is None:
+            return None
+        return target_id_for_uri(self.connection_info.display_uri)
 
     def on_mount(self) -> None:
         """Show the connection manager as the first visible screen."""
