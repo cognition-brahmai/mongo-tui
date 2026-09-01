@@ -65,6 +65,7 @@ async def test_command_palette_registers_global_and_contextual_actions(tmp_path)
         assert "Open aggregation editor" in browser_commands
         assert "Explain active query" in browser_commands
         assert "Manage indexes" in browser_commands
+        assert "Sample collection schema" in browser_commands
         assert "Open query history" not in browser_commands
         assert "Export active query" in browser_commands
         assert "Open selected document" in browser_commands

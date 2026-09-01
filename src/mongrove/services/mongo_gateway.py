@@ -76,6 +76,14 @@ class AggregationPage:
     elapsed_ms: int
 
 
+@dataclass(frozen=True, slots=True)
+class SchemaSample:
+    """Bounded random sample returned to the pure schema analyzer."""
+
+    documents: list[dict[str, Any]]
+    elapsed_ms: int
+
+
 class MongoGateway(Protocol):
     """The synchronous API invoked from Textual worker threads."""
 
@@ -223,6 +231,18 @@ class MongoGateway(Protocol):
         policy: SessionPolicy,
     ) -> None:
         """Drop one named collection index under the supplied session write policy."""
+        ...
+
+    def sample_documents(
+        self,
+        database: str,
+        collection: str,
+        filter_document: dict[str, Any],
+        *,
+        sample_size: int = 100,
+        max_time_ms: int = 10_000,
+    ) -> SchemaSample:
+        """Return a bounded random sample after applying the active find filter."""
         ...
 
 
@@ -672,6 +692,47 @@ class PyMongoGateway:
             collection_ref.drop_index(name)
         except (PyMongoError, BSONError, TypeError, ValueError) as error:
             raise MongoGatewayError(_driver_error_message(error)) from error
+
+    def sample_documents(
+        self,
+        database: str,
+        collection: str,
+        filter_document: dict[str, Any],
+        *,
+        sample_size: int = 100,
+        max_time_ms: int = 10_000,
+    ) -> SchemaSample:
+        """Run a bounded $sample aggregation, optionally after an active filter."""
+
+        if not 1 <= sample_size <= 10_000:
+            raise ValueError("Schema sample size must be between 1 and 10000.")
+        if max_time_ms < 1:
+            raise ValueError("Schema sample max time must be at least one millisecond.")
+        pipeline: list[dict[str, Any]] = []
+        if filter_document:
+            pipeline.append({"$match": filter_document})
+        pipeline.append({"$sample": {"size": sample_size}})
+        cursor: Any = None
+        started = perf_counter()
+        try:
+            cursor = self._require_client()[database][collection].aggregate(
+                pipeline,
+                maxTimeMS=max_time_ms,
+                batchSize=sample_size,
+            )
+            documents = list(cursor)
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except PyMongoError:
+                    pass
+        return SchemaSample(
+            documents=documents,
+            elapsed_ms=max(round((perf_counter() - started) * 1_000), 0),
+        )
 
     def _require_client(self) -> MongoClient[dict[str, Any]]:
         if self._client is None:

@@ -228,6 +228,16 @@ Footer {
     padding: 1 2;
 }
 
+#schema-dialog {
+    width: 110;
+    max-width: 96%;
+    height: 90%;
+    margin: 2 4;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
 #index-editor-dialog,
 #index-confirmation-dialog {
     width: 96;
@@ -304,6 +314,25 @@ Footer {
 #indexes-actions Button,
 #index-editor-actions Button,
 #index-confirmation-actions Button {
+    margin-right: 1;
+}
+
+#schema-controls {
+    height: auto;
+    margin-top: 1;
+}
+
+#schema-controls Label {
+    width: auto;
+    margin-right: 1;
+}
+
+#schema-sample-size {
+    width: 12;
+    margin-right: 1;
+}
+
+#schema-controls Button {
     margin-right: 1;
 }
 
@@ -389,6 +418,20 @@ Footer {
 #index-confirmation-status {
     color: $text-muted;
     min-height: 1;
+    margin-top: 1;
+}
+
+#schema-help,
+#schema-status,
+#schema-examples {
+    color: $text-muted;
+    min-height: 1;
+    margin-top: 1;
+}
+
+#schema-table {
+    height: 1fr;
+    border: round $secondary;
     margin-top: 1;
 }
 
@@ -506,6 +549,11 @@ Screen.-narrow #explain-dialog {
 Screen.-narrow #indexes-dialog,
 Screen.-narrow #index-editor-dialog,
 Screen.-narrow #index-confirmation-dialog {
+    width: 94%;
+    margin: 1 1;
+}
+
+Screen.-narrow #schema-dialog {
     width: 94%;
     margin: 1 1;
 }

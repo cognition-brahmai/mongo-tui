@@ -22,6 +22,7 @@ from mongrove.services.mongo_gateway import (
     InsertDocumentResult,
     MongoGatewayError,
     ReplaceDocumentResult,
+    SchemaSample,
 )
 
 
@@ -41,6 +42,7 @@ class FakeGateway:
         self.aggregation_explain_calls: list[tuple[str, str, AggregationPipeline, int]] = []
         self.index_create_calls: list[tuple[str, str, list[tuple[str, Any]], dict[str, Any]]] = []
         self.index_drop_calls: list[tuple[str, str, str]] = []
+        self.schema_sample_calls: list[tuple[str, str, dict[str, Any], int, int]] = []
         self.indexes: list[IndexInfo] = [
             IndexInfo(
                 name="_id_",
@@ -311,6 +313,23 @@ class FakeGateway:
         self._assert_writes_allowed(policy)
         self.index_drop_calls.append((database, collection, name))
         self.indexes = [index for index in self.indexes if index.name != name]
+
+    def sample_documents(
+        self,
+        database: str,
+        collection: str,
+        filter_document: dict[str, Any],
+        *,
+        sample_size: int = 100,
+        max_time_ms: int = 10_000,
+    ) -> SchemaSample:
+        self.schema_sample_calls.append(
+            (database, collection, deepcopy(filter_document), sample_size, max_time_ms)
+        )
+        return SchemaSample(
+            documents=deepcopy(self.documents[:sample_size]),
+            elapsed_ms=5,
+        )
 
     @staticmethod
     def _assert_writes_allowed(policy: SessionPolicy) -> None:

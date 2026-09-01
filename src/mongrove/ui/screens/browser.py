@@ -31,6 +31,7 @@ from mongrove.ui.screens.document import DocumentScreen
 from mongrove.ui.screens.document_editor import DocumentEditorScreen, DocumentWriteDraft
 from mongrove.ui.screens.explain import ExplainScreen
 from mongrove.ui.screens.indexes import IndexScreen
+from mongrove.ui.screens.schema import SchemaScreen
 from mongrove.ui.screens.aggregation import AggregationScreen
 from mongrove.ui.screens.export import ExportScreen
 from mongrove.ui.screens.mutation_confirmation import (
@@ -111,6 +112,7 @@ class BrowserScreen(Screen[None]):
                     yield Button("Aggregate", id="open-aggregation")
                     yield Button("Explain", id="explain-query")
                     yield Button("Indexes", id="open-indexes")
+                    yield Button("Schema", id="open-schema")
                 yield Static("Select a collection to query.", id="query-status")
                 with Horizontal(id="write-actions"):
                     yield Button("Insert", id="insert-document", disabled=True)
@@ -197,6 +199,13 @@ class BrowserScreen(Screen[None]):
         )
         commands.append(
             CommandAction(
+                "Sample collection schema",
+                "Infer observed BSON field types and cardinality from a bounded random sample",
+                self.action_open_schema,
+            )
+        )
+        commands.append(
+            CommandAction(
                 "Manage indexes",
                 "List index definitions, usage information, and confirmed index actions",
                 self.action_open_indexes,
@@ -278,6 +287,7 @@ class BrowserScreen(Screen[None]):
             "open-aggregation": self.action_open_aggregation,
             "explain-query": self.action_explain_query,
             "open-indexes": self.action_open_indexes,
+            "open-schema": self.action_open_schema,
             "insert-document": self.action_insert_document,
             "replace-document": self.action_replace_selected_document,
             "delete-document": self.action_delete_selected_document,
@@ -580,6 +590,26 @@ class BrowserScreen(Screen[None]):
                 self._active_collection,
                 writable_collection=self._collection_kind != "view",
             )
+        )
+
+    def action_open_schema(self) -> None:
+        """Open bounded schema sampling for an immutable active filter snapshot."""
+
+        if self._active_database is None or self._active_collection is None:
+            self._set_query_status("Select a collection before sampling its schema.", error=True)
+            return
+        state = replace(
+            self._query_state,
+            filter_text=self.query_one("#filter-input", Input).value,
+        )
+        try:
+            query = parse_find_query(state)
+        except QueryValidationError as error:
+            self._set_query_status(str(error), error=True)
+            self.query_one("#filter-input", Input).focus()
+            return
+        self.app.push_screen(
+            SchemaScreen(self._active_database, self._active_collection, query.filter)
         )
 
     def action_disconnect(self) -> None:
