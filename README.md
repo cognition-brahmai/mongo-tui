@@ -62,12 +62,13 @@ Supported environment settings are `MONGROVE_URI`, `MONGROVE_PROFILE`, `MONGROVE
 | Aggregation | Raw JSON/EJSON pipeline editor with bounded result previews and BSON-aware inspection. |
 | Explain | Planner-only find and aggregation explain views with normalized warnings and raw EJSON. |
 | Indexes | Index inventory, node-local usage reporting, confirmed creation, and typed-confirmed drop. |
+| Schema | Bounded random samples with observed field types, cardinality, presence, null frequency, and examples. |
 | Queries | JSON/Extended JSON filter, projection, sort, collation, skip, limit, and `maxTimeMS`. |
 | History | Bounded per-target query history with search, names, favorites, filter copy, deletion, and safe full-state restore. |
 | Themes | Four Mongrove themes, curated Textual themes, a keyboard picker, and saved preference. |
 | Input | Keyboard-first workflows with optional mouse click, wheel, and header-sort support. |
 
-The current release focuses on safe exploration, deliberately confirmed single-document changes, bounded-memory exports, aggregation previews, and practical index management. Schema analysis, validation, import, and live performance monitoring are planned next.
+The current release focuses on safe exploration, deliberately confirmed single-document changes, bounded-memory exports, aggregation previews, index management, and honest schema sampling. Validation, import, and live performance monitoring are planned next.
 
 ## First Session
 
@@ -152,6 +153,12 @@ Explain requests use a 5-second server cap and do not collect execution statisti
 Use **Indexes** or `Ctrl+P` from an active collection to inspect index key patterns, uniqueness/sparse/hidden flags, raw specifications, and `$indexStats` usage. Usage is explicitly labelled unavailable when the server or account does not support it; it is node-local and resets after a server restart, so it is not a global lifetime count.
 
 **Create Index** accepts ordered JSON/EJSON keys and options, then presents the exact definition for confirmation. **Drop Selected** only drops the selected named index and requires `DROP index_name` outside production, or the production `WRITE database.collection` acknowledgement when production writes have been explicitly enabled. Views and read-only sessions cannot mutate indexes.
+
+## Schema Sampling
+
+Use **Schema** or `Ctrl+P` from an active collection to run a random `$sample` after the current filter. The report labels its finite sample size and shows observed field paths, presence frequency, null frequency, BSON type distribution, capped cardinality, and canonical EJSON examples. Nested objects use dotted paths; array elements use `[]` suffixes.
+
+Sampling never claims to be a complete schema, never creates a validator, and does not scan the full collection. Large field values are bounded in local analysis memory, so examples may be truncated and cardinality may be shown with a `+` suffix when its tracking cap is reached.
 
 ## Themes
 
