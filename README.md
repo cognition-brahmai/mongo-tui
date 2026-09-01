@@ -60,6 +60,7 @@ Supported environment settings are `MONGROVE_URI`, `MONGROVE_PROFILE`, `MONGROVE
 | Writes | Confirmed single-document insert, replace, and delete with canonical EJSON editing. |
 | Export | Streaming query exports as JSON, canonical EJSON, or BSON-safe CSV. |
 | Aggregation | Raw JSON/EJSON pipeline editor with bounded result previews and BSON-aware inspection. |
+| Explain | Planner-only find and aggregation explain views with normalized warnings and raw EJSON. |
 | Queries | JSON/Extended JSON filter, projection, sort, collation, skip, limit, and `maxTimeMS`. |
 | History | Bounded per-target query history with search, names, favorites, filter copy, deletion, and safe full-state restore. |
 | Themes | Four Mongrove themes, curated Textual themes, a keyboard picker, and saved preference. |
@@ -138,6 +139,12 @@ Use **Aggregate** or `Ctrl+P` from an active collection to open the raw pipeline
 ```
 
 The editor detects `$out` and `$merge` and refuses to run them. Those pipeline stages mutate data, so they remain unavailable until a destination-review and explicit confirmation workflow is added.
+
+## Explain Plans
+
+Use **Explain** from the collection toolbar or **Explain Pipeline** in the aggregation editor to inspect planner-only explain output. Mongrove shows the normalized winning-plan stages, indexes, rejected-plan count, and evidence-based observations such as `COLLSCAN`, `SORT`, and `SHARD_MERGE`, while retaining the raw EJSON response for version-specific details.
+
+Explain requests use a 5-second server cap and do not collect execution statistics or all-plans execution data. They are diagnostic planner evidence, not a normal-execution timing benchmark: MongoDB explain does not use the ordinary plan-cache path. Raw explain responses are never added to query history.
 
 ## Themes
 

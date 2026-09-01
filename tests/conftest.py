@@ -8,6 +8,7 @@ from typing import Any
 from bson import ObjectId
 
 from mongrove.domain.connection import ConnectionInfo
+from mongrove.domain.explain import ExplainResult, normalize_aggregation_explain, normalize_find_explain
 from mongrove.domain.namespace import CollectionInfo
 from mongrove.domain.pipeline import AggregationPipeline
 from mongrove.domain.query import FindQuery
@@ -35,6 +36,8 @@ class FakeGateway:
         self.delete_calls: list[tuple[str, str, Any]] = []
         self.stream_calls: list[tuple[str, str, FindQuery]] = []
         self.aggregation_calls: list[tuple[str, str, AggregationPipeline, int, int]] = []
+        self.find_explain_calls: list[tuple[str, str, FindQuery, int]] = []
+        self.aggregation_explain_calls: list[tuple[str, str, AggregationPipeline, int]] = []
         self.documents: list[dict[str, Any]] = [
             {
                 "_id": ObjectId("65ba0aa00000000000000001"),
@@ -183,6 +186,51 @@ class FakeGateway:
             has_more=has_more,
             elapsed_ms=4,
         )
+
+    def explain_find(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        self.find_explain_calls.append((database, collection, query, max_time_ms))
+        raw = {
+            "queryPlanner": {
+                "winningPlan": {
+                    "stage": "FETCH",
+                    "inputStage": {"stage": "IXSCAN", "indexName": "status_1"},
+                },
+                "rejectedPlans": [],
+            }
+        }
+        return normalize_find_explain(raw, query, 3)
+
+    def explain_aggregation(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        if pipeline.has_write_stage:
+            raise MongoGatewayError("Aggregation write stages are unavailable in FakeGateway.")
+        self.aggregation_explain_calls.append((database, collection, pipeline, max_time_ms))
+        raw = {
+            "stages": [
+                {
+                    "$cursor": {
+                        "queryPlanner": {
+                            "winningPlan": {"stage": "COLLSCAN"},
+                            "rejectedPlans": [],
+                        }
+                    }
+                }
+            ]
+        }
+        return normalize_aggregation_explain(raw, pipeline, 4)
 
     @staticmethod
     def _assert_writes_allowed(policy: SessionPolicy) -> None:
