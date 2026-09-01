@@ -109,9 +109,9 @@ class BrowserScreen(Screen[None]):
         if connection_info is not None:
             server_version = connection_info.server_version or "unknown version"
             topology = connection_info.topology or "unknown topology"
-            mode = "READ ONLY" if self.mongrove_app.read_only else "READ MODE"
             self.query_one("#connection-banner", Static).update(
-                f"{connection_info.display_uri} | MongoDB {server_version} | {topology} | {mode}"
+                f"{connection_info.display_uri} | MongoDB {server_version} | {topology} | "
+                f"{self.mongrove_app.connection_indicator()}"
             )
         self._load_databases()
 
@@ -245,6 +245,7 @@ class BrowserScreen(Screen[None]):
     def action_disconnect(self) -> None:
         self.mongrove_app.gateway.disconnect()
         self.mongrove_app.connection_info = None
+        self.mongrove_app.set_connection_context(alias=None, environment=None)
         self.app.pop_screen()
 
     @work(thread=True, exclusive=True, group="databases", exit_on_error=False)

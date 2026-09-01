@@ -32,6 +32,23 @@ mongrove --read-only
 
 `--read-only` is an interface safeguard. MongoDB server-side roles remain the security boundary. Use a least-privilege `read` user to enforce true production read-only access.
 
+## Target Safeguards
+
+Saved connection names are aliases. Give each alias an explicit `development`, `staging`, or `production` environment label so the active target is always visible in the workspace banner.
+
+Production aliases open in local read-only mode by default. Intentional production changes require `--allow-production-writes`; every mutation still uses its own explicit confirmation flow. This is an operator safeguard, not a substitute for MongoDB roles.
+
+Mongrove resolves startup settings from the command line first, then from environment variables. A command-line URI or `--alias` always wins over a shell's `MONGROVE_URI` or `MONGROVE_PROFILE` value.
+
+```bash
+export MONGROVE_PROFILE=staging-eu
+export MONGROVE_ENVIRONMENT=staging
+export MONGROVE_READ_ONLY=true
+mongrove
+```
+
+Supported environment settings are `MONGROVE_URI`, `MONGROVE_PROFILE`, `MONGROVE_DATABASE`, `MONGROVE_COLLECTION`, `MONGROVE_CONFIG_DIR`, `MONGROVE_THEME`, `MONGROVE_ENVIRONMENT`, `MONGROVE_READ_ONLY`, `MONGROVE_NO_HISTORY`, and `MONGROVE_ALLOW_PRODUCTION_WRITES`. Boolean values accept `true`/`false`, `yes`/`no`, `on`/`off`, or `1`/`0`; invalid values fail safely at startup.
+
 ## What It Does Today
 
 | Area | Available now |

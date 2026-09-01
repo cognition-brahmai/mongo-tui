@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from textual.widgets import DataTable, Input, Tree
 
+from mongrove.domain.connection import ConnectionProfile
 from mongrove.services.profile_store import ProfileStore
 from mongrove.ui.app import MongroveApp
 from mongrove.ui.screens.browser import BrowserScreen
@@ -167,3 +168,34 @@ async def test_document_inspector_scrolls_with_keyboard(tmp_path) -> None:
         await pilot.press("pagedown")
         await pilot.pause()
         assert viewer.scroll_y > 0
+
+
+@pytest.mark.asyncio
+async def test_production_alias_is_prominently_guarded_in_the_workspace(tmp_path) -> None:
+    profiles = ProfileStore(tmp_path / "connections.json")
+    profiles.save(
+        ConnectionProfile(
+            name="production-eu",
+            uri="mongodb://db.internal:27017",
+            environment="production",
+        )
+    )
+    app = MongroveApp(
+        gateway=FakeGateway(),
+        profile_store=profiles,
+        startup_profile="production-eu",
+    )
+
+    async with app.run_test(size=(140, 42)) as pilot:
+        connection = app.screen
+        assert isinstance(connection, ConnectionScreen)
+        assert connection.query_one("#environment-input", Input).value == "production"
+        await pilot.press("ctrl+enter")
+        await _settle(pilot)
+
+        assert isinstance(app.screen, BrowserScreen)
+        assert app.read_only is True
+        banner = app.screen.query_one("#connection-banner")
+        assert "ALIAS production-eu" in str(banner.render())
+        assert "ENV PRODUCTION" in str(banner.render())
+        assert "PRODUCTION READ ONLY" in str(banner.render())
