@@ -1,6 +1,7 @@
 """MongoDB and local-persistence services for Mongrove."""
 
 from mongrove.services.mongo_gateway import (
+    AggregationPage,
     DeleteDocumentResult,
     FindStreamResult,
     InsertDocumentResult,
@@ -16,6 +17,7 @@ from mongrove.services.settings_store import SettingsStore
 
 __all__ = [
     "DeleteDocumentResult",
+    "AggregationPage",
     "ExportFormat",
     "ExportRequest",
     "ExportResult",

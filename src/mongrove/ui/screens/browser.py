@@ -29,6 +29,7 @@ from mongrove.services.query_history import QueryHistoryEntry, QueryHistoryStore
 from mongrove.ui.commands import CommandAction
 from mongrove.ui.screens.document import DocumentScreen
 from mongrove.ui.screens.document_editor import DocumentEditorScreen, DocumentWriteDraft
+from mongrove.ui.screens.aggregation import AggregationScreen
 from mongrove.ui.screens.export import ExportScreen
 from mongrove.ui.screens.mutation_confirmation import (
     MutationConfirmationResult,
@@ -105,6 +106,7 @@ class BrowserScreen(Screen[None]):
                     yield Button("Options", id="query-options")
                     yield Button("History", id="query-history")
                     yield Button("Export", id="export-query")
+                    yield Button("Aggregate", id="open-aggregation")
                 yield Static("Select a collection to query.", id="query-status")
                 with Horizontal(id="write-actions"):
                     yield Button("Insert", id="insert-document", disabled=True)
@@ -182,6 +184,13 @@ class BrowserScreen(Screen[None]):
                     self.action_export_query,
                 )
             )
+        commands.append(
+            CommandAction(
+                "Open aggregation editor",
+                "Build and preview a BSON-aware aggregation pipeline",
+                self.action_open_aggregation,
+            )
+        )
         if self.mongrove_app.query_history.enabled:
             commands.append(
                 CommandAction(
@@ -248,6 +257,7 @@ class BrowserScreen(Screen[None]):
             "query-options": self.action_open_query_options,
             "query-history": self.action_open_query_history,
             "export-query": self.action_export_query,
+            "open-aggregation": self.action_open_aggregation,
             "insert-document": self.action_insert_document,
             "replace-document": self.action_replace_selected_document,
             "delete-document": self.action_delete_selected_document,
@@ -506,6 +516,16 @@ class BrowserScreen(Screen[None]):
                 connection_indicator=self.mongrove_app.connection_indicator(),
             ),
             self._export_closed,
+        )
+
+    def action_open_aggregation(self) -> None:
+        """Open the raw aggregation editor for the active collection."""
+
+        if self._active_database is None or self._active_collection is None:
+            self._set_query_status("Select a collection before opening aggregation.", error=True)
+            return
+        self.app.push_screen(
+            AggregationScreen(self._active_database, self._active_collection)
         )
 
     def action_disconnect(self) -> None:

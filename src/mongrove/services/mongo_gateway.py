@@ -15,6 +15,7 @@ from pymongo.errors import PyMongoError
 
 from mongrove.domain.connection import ConnectionInfo
 from mongrove.domain.namespace import CollectionInfo
+from mongrove.domain.pipeline import AggregationPipeline
 from mongrove.domain.query import FindQuery
 from mongrove.domain.session import SessionPolicy
 
@@ -61,6 +62,15 @@ class FindStreamResult:
 
     documents_seen: int
     cancelled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationPage:
+    """A bounded aggregation preview and server timing metadata."""
+
+    documents: list[dict[str, Any]]
+    has_more: bool
+    elapsed_ms: int
 
 
 class MongoGateway(Protocol):
@@ -139,6 +149,18 @@ class MongoGateway(Protocol):
         batch_size: int = 100,
     ) -> FindStreamResult:
         """Stream every document matching a find query without materializing it."""
+        ...
+
+    def aggregate_documents(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        page_size: int = 100,
+        max_time_ms: int = 60_000,
+    ) -> AggregationPage:
+        """Run a bounded read-only aggregation preview."""
         ...
 
 
@@ -358,6 +380,51 @@ class PyMongoGateway:
                 except PyMongoError:
                     pass
         return FindStreamResult(documents_seen=documents_seen, cancelled=is_cancelled())
+
+    def aggregate_documents(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        page_size: int = 100,
+        max_time_ms: int = 60_000,
+    ) -> AggregationPage:
+        """Run a read-only pipeline prefix with a final bounded preview limit."""
+
+        if pipeline.has_write_stage:
+            stages = ", ".join(pipeline.write_stages)
+            raise MongoGatewayError(
+                f"Aggregation write stages are not available in previews: {stages}."
+            )
+        if page_size < 1:
+            raise ValueError("Aggregation preview size must be at least one.")
+        if max_time_ms < 1:
+            raise ValueError("Aggregation max time must be at least one millisecond.")
+        collection_ref = self._require_client()[database][collection]
+        preview_pipeline = [*pipeline.stages, {"$limit": page_size + 1}]
+        cursor: Any = None
+        started = perf_counter()
+        try:
+            cursor = collection_ref.aggregate(
+                preview_pipeline,
+                maxTimeMS=max_time_ms,
+                batchSize=page_size + 1,
+            )
+            documents = list(cursor)
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except PyMongoError:
+                    pass
+        elapsed_ms = max(round((perf_counter() - started) * 1_000), 0)
+        has_more = len(documents) > page_size
+        if has_more:
+            documents = documents[:page_size]
+        return AggregationPage(documents=documents, has_more=has_more, elapsed_ms=elapsed_ms)
 
     def _require_client(self) -> MongoClient[dict[str, Any]]:
         if self._client is None:

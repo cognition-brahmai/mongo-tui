@@ -198,6 +198,16 @@ Footer {
     height: 88%;
 }
 
+#aggregation-dialog {
+    width: 110;
+    max-width: 96%;
+    height: 90%;
+    margin: 2 4;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
 .integer-options {
     height: auto;
 }
@@ -232,6 +242,15 @@ Footer {
 }
 
 #export-actions Button {
+    margin-right: 1;
+}
+
+#aggregation-actions {
+    height: auto;
+    margin-top: 1;
+}
+
+#aggregation-actions Button {
     margin-right: 1;
 }
 
@@ -280,6 +299,38 @@ Footer {
 
 #export-warning {
     color: $warning;
+}
+
+#aggregation-help,
+#aggregation-status {
+    color: $text-muted;
+    min-height: 1;
+    margin-top: 1;
+}
+
+#pipeline-editor {
+    height: 12;
+    border: round $secondary;
+    margin-top: 1;
+}
+
+#aggregation-results {
+    height: 1fr;
+    margin-top: 1;
+}
+
+#aggregation-table {
+    width: 3fr;
+    height: 1fr;
+    border: round $secondary;
+}
+
+#aggregation-inspector {
+    width: 2fr;
+    height: 1fr;
+    margin-left: 1;
+    padding: 1;
+    border: round $secondary;
 }
 
 #document-editor,
@@ -336,4 +387,17 @@ Screen.-narrow #mutation-confirmation-dialog,
 Screen.-narrow #export-dialog {
     width: 94%;
     margin: 1 1;
+}
+
+Screen.-narrow #aggregation-dialog {
+    width: 94%;
+    margin: 1 1;
+}
+
+Screen.-narrow #aggregation-inspector {
+    display: none;
+}
+
+Screen.-narrow #aggregation-table {
+    width: 1fr;
 }
