@@ -49,9 +49,20 @@ class SessionPolicy:
     def writes_blocked(self) -> bool:
         """Whether local policy must reject all mutation requests."""
 
-        return self.requested_read_only or (
-            self.is_production and not self.allow_production_writes
-        )
+        return self.write_block_reason is not None
+
+    @property
+    def write_block_reason(self) -> str | None:
+        """Explain why the session must not dispatch a MongoDB mutation."""
+
+        if self.requested_read_only:
+            return "Writes are disabled for this session by read-only mode."
+        if self.is_production and not self.allow_production_writes:
+            return (
+                "Production writes are disabled. Restart with "
+                "--allow-production-writes to enable confirmed writes."
+            )
+        return None
 
     @property
     def history_enabled(self) -> bool:

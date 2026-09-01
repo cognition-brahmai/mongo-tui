@@ -1,4 +1,4 @@
-"""Read-only database, collection, query, and document browser screen."""
+"""Database, collection, query, document, and confirmed-write browser screen."""
 
 from __future__ import annotations
 
@@ -15,11 +15,23 @@ from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Sta
 
 from mongrove.domain.namespace import CollectionInfo, NamespaceTreeItem
 from mongrove.domain.query import FindQuery, QueryFormState, QueryValidationError, parse_find_query
+from mongrove.domain.session import SessionPolicy
 from mongrove.services.bson_codec import format_cell
-from mongrove.services.mongo_gateway import DocumentsPage, MongoGatewayError
+from mongrove.services.mongo_gateway import (
+    DeleteDocumentResult,
+    DocumentsPage,
+    InsertDocumentResult,
+    MongoGatewayError,
+    ReplaceDocumentResult,
+)
 from mongrove.services.query_history import QueryHistoryEntry, QueryHistoryStoreError
 from mongrove.ui.commands import CommandAction
 from mongrove.ui.screens.document import DocumentScreen
+from mongrove.ui.screens.document_editor import DocumentEditorScreen, DocumentWriteDraft
+from mongrove.ui.screens.mutation_confirmation import (
+    MutationConfirmationResult,
+    MutationConfirmationScreen,
+)
 from mongrove.ui.screens.query_history import QueryHistoryScreen
 from mongrove.ui.screens.query_options import QueryOptionsScreen
 from mongrove.ui.widgets.document_table import DocumentTable
@@ -60,6 +72,7 @@ class BrowserScreen(Screen[None]):
         self._sort_direction = 1
         self._history_request_id = 0
         self._record_history_requests: dict[int, QueryFormState] = {}
+        self._mutation_in_flight = False
 
     @property
     def mongrove_app(self) -> MongroveApp:
@@ -90,6 +103,10 @@ class BrowserScreen(Screen[None]):
                     yield Button("Options", id="query-options")
                     yield Button("History", id="query-history")
                 yield Static("Select a collection to query.", id="query-status")
+                with Horizontal(id="write-actions"):
+                    yield Button("Insert", id="insert-document", disabled=True)
+                    yield Button("Replace", id="replace-document", disabled=True)
+                    yield Button("Delete", id="delete-document", variant="error", disabled=True)
                 with Horizontal(id="result-layout"):
                     yield DocumentTable(
                         id="documents-table",
@@ -120,6 +137,7 @@ class BrowserScreen(Screen[None]):
                 f"{connection_info.display_uri} | MongoDB {server_version} | {topology} | "
                 f"{self.mongrove_app.connection_indicator()}"
             )
+        self._update_write_controls()
         self._load_databases()
 
     def get_command_actions(self) -> tuple[CommandAction, ...]:
@@ -188,6 +206,29 @@ class BrowserScreen(Screen[None]):
                     self.action_open_selected_document,
                 )
             )
+        if self._mutation_block_reason() is None:
+            commands.append(
+                CommandAction(
+                    "Insert document",
+                    "Create one document through canonical EJSON review and confirmation",
+                    self.action_insert_document,
+                )
+            )
+            if self._selected_document_with_id() is not None:
+                commands.extend(
+                    (
+                        CommandAction(
+                            "Replace selected document",
+                            "Replace the selected immutable _id after EJSON review",
+                            self.action_replace_selected_document,
+                        ),
+                        CommandAction(
+                            "Delete selected document",
+                            "Delete exactly the selected immutable _id after confirmation",
+                            self.action_delete_selected_document,
+                        ),
+                    )
+                )
         return tuple(commands)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -195,6 +236,9 @@ class BrowserScreen(Screen[None]):
             "run-query": self.action_run_query,
             "query-options": self.action_open_query_options,
             "query-history": self.action_open_query_history,
+            "insert-document": self.action_insert_document,
+            "replace-document": self.action_replace_selected_document,
+            "delete-document": self.action_delete_selected_document,
             "previous-page": self.action_previous_page,
             "next-page": self.action_next_page,
         }
@@ -229,6 +273,7 @@ class BrowserScreen(Screen[None]):
             self._collection_kind = data.collection_kind
             self._current_page = 0
             self._set_collection_title()
+            self._update_write_controls()
             self._run_query(record_history=False)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
@@ -237,6 +282,7 @@ class BrowserScreen(Screen[None]):
         if 0 <= event.cursor_row < len(self._documents):
             self._selected_document_index = event.cursor_row
             self._render_document_inspector(self._documents[event.cursor_row])
+            self._update_write_controls()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.data_table.id != "documents-table":
@@ -258,6 +304,68 @@ class BrowserScreen(Screen[None]):
             return
         self.app.push_screen(
             DocumentScreen(self._documents[self._selected_document_index], namespace)
+        )
+
+    def action_insert_document(self) -> None:
+        """Open a canonical EJSON editor for one new document."""
+
+        if not self._ensure_mutation_allowed():
+            return
+        namespace = self.namespace
+        if namespace is None:
+            return
+        self.app.push_screen(
+            DocumentEditorScreen("insert", namespace),
+            self._document_editor_closed,
+        )
+
+    def action_replace_selected_document(self) -> None:
+        """Open a canonical EJSON editor for the selected immutable _id."""
+
+        if not self._ensure_mutation_allowed():
+            return
+        document = self._selected_document_with_id()
+        if document is None:
+            self._set_query_status(
+                "The selected document has no _id; reload it with _id before replacing.",
+                error=True,
+            )
+            return
+        namespace = self.namespace
+        if namespace is None:
+            return
+        self.app.push_screen(
+            DocumentEditorScreen(
+                "replace",
+                namespace,
+                document=document,
+                original_id=document["_id"],
+            ),
+            self._document_editor_closed,
+        )
+
+    def action_delete_selected_document(self) -> None:
+        """Confirm deletion of exactly the selected immutable _id."""
+
+        if not self._ensure_mutation_allowed():
+            return
+        document = self._selected_document_with_id()
+        if document is None:
+            self._set_query_status(
+                "The selected document has no _id; reload it with _id before deleting.",
+                error=True,
+            )
+            return
+        namespace = self.namespace
+        if namespace is None:
+            return
+        self._show_mutation_confirmation(
+            DocumentWriteDraft(
+                operation="delete",
+                namespace=namespace,
+                document=None,
+                original_id=document["_id"],
+            )
         )
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
@@ -359,10 +467,181 @@ class BrowserScreen(Screen[None]):
         )
 
     def action_disconnect(self) -> None:
+        if self._mutation_in_flight:
+            self._set_query_status("Wait for the document mutation to finish before disconnecting.")
+            return
         self.mongrove_app.gateway.disconnect()
         self.mongrove_app.connection_info = None
         self.mongrove_app.set_connection_context(alias=None, environment=None)
         self.app.pop_screen()
+
+    def _mutation_block_reason(self) -> str | None:
+        if self.namespace is None:
+            return "Select a writable collection before changing documents."
+        if self._collection_kind == "view":
+            return "MongoDB views are not writable."
+        if self._mutation_in_flight:
+            return "Another document mutation is already in progress."
+        return self.mongrove_app.session_policy.write_block_reason
+
+    def _ensure_mutation_allowed(self) -> bool:
+        reason = self._mutation_block_reason()
+        if reason is None:
+            return True
+        self._set_query_status(reason, error=True)
+        return False
+
+    def _selected_document(self) -> dict[str, Any] | None:
+        if (
+            self._selected_document_index is None
+            or not 0 <= self._selected_document_index < len(self._documents)
+        ):
+            return None
+        return self._documents[self._selected_document_index]
+
+    def _selected_document_with_id(self) -> dict[str, Any] | None:
+        document = self._selected_document()
+        if document is None or "_id" not in document:
+            return None
+        return document
+
+    def _update_write_controls(self) -> None:
+        reason = self._mutation_block_reason()
+        selected = self._selected_document_with_id()
+        self.query_one("#insert-document", Button).disabled = reason is not None
+        self.query_one("#replace-document", Button).disabled = reason is not None or selected is None
+        self.query_one("#delete-document", Button).disabled = reason is not None or selected is None
+
+    def _document_editor_closed(self, draft: DocumentWriteDraft | None) -> None:
+        if draft is not None:
+            self._show_mutation_confirmation(draft)
+
+    def _show_mutation_confirmation(self, draft: DocumentWriteDraft) -> None:
+        if not self._ensure_mutation_allowed():
+            return
+        if draft.namespace != self.namespace:
+            self._set_query_status("The collection changed; reopen the document editor.", error=True)
+            return
+        self.app.push_screen(
+            MutationConfirmationScreen(
+                draft,
+                connection_indicator=self.mongrove_app.connection_indicator(),
+                required_phrase=self._confirmation_phrase(draft),
+            ),
+            self._mutation_confirmation_closed,
+        )
+
+    def _confirmation_phrase(self, draft: DocumentWriteDraft) -> str | None:
+        if self.mongrove_app.session_policy.production_confirmation_required:
+            return f"WRITE {draft.namespace}"
+        if draft.operation == "delete":
+            return f"DELETE {draft.namespace}"
+        return None
+
+    def _mutation_confirmation_closed(
+        self,
+        result: MutationConfirmationResult | None,
+    ) -> None:
+        if result is None:
+            return
+        draft = result.draft
+        if not self._ensure_mutation_allowed():
+            return
+        if draft.namespace != self.namespace:
+            self._set_query_status("The collection changed; the mutation was not dispatched.", error=True)
+            return
+        required_phrase = self._confirmation_phrase(draft)
+        if required_phrase is not None and result.acknowledgement != required_phrase:
+            self._set_query_status("The required acknowledgement was not accepted.", error=True)
+            return
+        if self._active_database is None or self._active_collection is None:
+            self._set_query_status("Select a writable collection before changing documents.", error=True)
+            return
+        self._mutation_in_flight = True
+        self._update_write_controls()
+        self._dispatch_document_mutation(
+            draft,
+            self._active_database,
+            self._active_collection,
+            self.mongrove_app.session_policy,
+        )
+
+    @work(thread=True, exclusive=True, group="mutation", exit_on_error=False)
+    def _dispatch_document_mutation(
+        self,
+        draft: DocumentWriteDraft,
+        database: str,
+        collection: str,
+        policy: SessionPolicy,
+    ) -> None:
+        try:
+            if draft.operation == "insert":
+                if draft.document is None:
+                    raise MongoGatewayError("Insert mutation is missing its document payload.")
+                result = self.mongrove_app.gateway.insert_document(
+                    database,
+                    collection,
+                    draft.document,
+                    policy=policy,
+                )
+                if not isinstance(result, InsertDocumentResult):
+                    raise MongoGatewayError("Insert operation returned an invalid result.")
+                message = f"Inserted document {format_cell(result.inserted_id)}."
+            elif draft.operation == "replace":
+                if draft.document is None:
+                    raise MongoGatewayError("Replace mutation is missing its document payload.")
+                result = self.mongrove_app.gateway.replace_document(
+                    database,
+                    collection,
+                    draft.original_id,
+                    draft.document,
+                    policy=policy,
+                )
+                if not isinstance(result, ReplaceDocumentResult):
+                    raise MongoGatewayError("Replace operation returned an invalid result.")
+                message = (
+                    f"Replace matched {result.matched_count}; modified {result.modified_count}."
+                )
+            else:
+                result = self.mongrove_app.gateway.delete_document(
+                    database,
+                    collection,
+                    draft.original_id,
+                    policy=policy,
+                )
+                if not isinstance(result, DeleteDocumentResult):
+                    raise MongoGatewayError("Delete operation returned an invalid result.")
+                message = f"Deleted {result.deleted_count} document(s)."
+        except MongoGatewayError as error:
+            self.app.call_from_thread(self._mutation_failed, str(error))
+            return
+        self.app.call_from_thread(
+            self._mutation_succeeded,
+            draft,
+            database,
+            collection,
+            message,
+        )
+
+    def _mutation_succeeded(
+        self,
+        draft: DocumentWriteDraft,
+        database: str,
+        collection: str,
+        message: str,
+    ) -> None:
+        self._mutation_in_flight = False
+        self._update_write_controls()
+        self.notify(message)
+        if self._active_database == database and self._active_collection == collection:
+            self._run_query(record_history=False)
+        else:
+            self._set_query_status(message)
+
+    def _mutation_failed(self, message: str) -> None:
+        self._mutation_in_flight = False
+        self._update_write_controls()
+        self._set_query_status(f"Mutation failed: {message}", error=True)
 
     @work(thread=True, exclusive=True, group="databases", exit_on_error=False)
     def _load_databases(self) -> None:
@@ -487,6 +766,7 @@ class BrowserScreen(Screen[None]):
                     self._active_collection = collection.name
                     self._collection_kind = collection.kind
                     self._set_collection_title()
+                    self._update_write_controls()
                     self._run_query(record_history=False)
                     break
 
@@ -530,6 +810,7 @@ class BrowserScreen(Screen[None]):
         self._has_more = result.has_more
         self._selected_document_index = 0 if result.documents else None
         self._render_document_table(result.documents)
+        self._update_write_controls()
         if result.documents:
             self._render_document_inspector(result.documents[0])
         else:

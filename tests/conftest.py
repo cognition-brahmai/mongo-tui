@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from bson import ObjectId
@@ -9,7 +10,14 @@ from bson import ObjectId
 from mongrove.domain.connection import ConnectionInfo
 from mongrove.domain.namespace import CollectionInfo
 from mongrove.domain.query import FindQuery
-from mongrove.services.mongo_gateway import DocumentsPage
+from mongrove.domain.session import SessionPolicy
+from mongrove.services.mongo_gateway import (
+    DeleteDocumentResult,
+    DocumentsPage,
+    InsertDocumentResult,
+    MongoGatewayError,
+    ReplaceDocumentResult,
+)
 
 
 class FakeGateway:
@@ -19,6 +27,9 @@ class FakeGateway:
         self.connected_uri: str | None = None
         self.disconnect_calls = 0
         self.queries: list[tuple[str, str, FindQuery, int, int]] = []
+        self.insert_calls: list[tuple[str, str, dict[str, Any]]] = []
+        self.replace_calls: list[tuple[str, str, Any, dict[str, Any]]] = []
+        self.delete_calls: list[tuple[str, str, Any]] = []
         self.documents: list[dict[str, Any]] = [
             {
                 "_id": ObjectId("65ba0aa00000000000000001"),
@@ -74,3 +85,57 @@ class FakeGateway:
             elapsed_ms=4,
             skip=skip,
         )
+
+    def insert_document(
+        self,
+        database: str,
+        collection: str,
+        document: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> InsertDocumentResult:
+        self._assert_writes_allowed(policy)
+        stored = deepcopy(document)
+        stored.setdefault("_id", ObjectId())
+        self.documents.append(stored)
+        self.insert_calls.append((database, collection, deepcopy(document)))
+        return InsertDocumentResult(inserted_id=stored["_id"])
+
+    def replace_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        replacement: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> ReplaceDocumentResult:
+        self._assert_writes_allowed(policy)
+        self.replace_calls.append((database, collection, original_id, deepcopy(replacement)))
+        for index, document in enumerate(self.documents):
+            if document.get("_id") == original_id:
+                modified = int(document != replacement)
+                self.documents[index] = deepcopy(replacement)
+                return ReplaceDocumentResult(matched_count=1, modified_count=modified)
+        return ReplaceDocumentResult(matched_count=0, modified_count=0)
+
+    def delete_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        *,
+        policy: SessionPolicy,
+    ) -> DeleteDocumentResult:
+        self._assert_writes_allowed(policy)
+        self.delete_calls.append((database, collection, original_id))
+        for index, document in enumerate(self.documents):
+            if document.get("_id") == original_id:
+                del self.documents[index]
+                return DeleteDocumentResult(deleted_count=1)
+        return DeleteDocumentResult(deleted_count=0)
+
+    @staticmethod
+    def _assert_writes_allowed(policy: SessionPolicy) -> None:
+        if policy.write_block_reason is not None:
+            raise MongoGatewayError(policy.write_block_reason)

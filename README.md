@@ -57,12 +57,13 @@ Supported environment settings are `MONGROVE_URI`, `MONGROVE_PROFILE`, `MONGROVE
 | Privacy | Saved profiles remove URI credentials before writing local files. |
 | Navigation | Lazy database and collection tree navigation. |
 | Documents | Bounded result pages, dynamic table columns, BSON-aware JSON inspection, and a full-document modal. |
+| Writes | Confirmed single-document insert, replace, and delete with canonical EJSON editing. |
 | Queries | JSON/Extended JSON filter, projection, sort, collation, skip, limit, and `maxTimeMS`. |
 | History | Bounded per-target query history with search, names, favorites, filter copy, deletion, and safe full-state restore. |
 | Themes | Four Mongrove themes, curated Textual themes, a keyboard picker, and saved preference. |
 | Input | Keyboard-first workflows with optional mouse click, wheel, and header-sort support. |
 
-The current release focuses on safe read-only exploration. Write workflows, aggregation editing, schema analysis, index management, validation, import/export, and live performance monitoring are planned next.
+The current release focuses on safe exploration and deliberately confirmed single-document changes. Aggregation editing, schema analysis, index management, validation, import/export, and live performance monitoring are planned next.
 
 ## First Session
 
@@ -100,6 +101,17 @@ Mongrove fetches one page plus one extra document to determine whether a next pa
 Press `Ctrl+R` in a collection workspace to search and restore prior successful manual queries. Mongrove stores the complete find form, including filter, projection, sort, collation, pagination, and maximum execution time. Loading a saved entry does not execute it until you press `F5` or **Run**.
 
 History is scoped to a hashed credential-free connection target and namespace. It retains 30 recent non-favorite queries per namespace and at most 1,000 non-favorite entries overall. Favorites are preserved until you remove them. Query filters can contain sensitive values, so use `--no-history` or `MONGROVE_NO_HISTORY=true` whenever local persistence is inappropriate.
+
+## Confirmed Document Writes
+
+For ordinary collections, **Insert**, **Replace**, and **Delete** are available beside the query results and through `Ctrl+P`. Each operation opens a canonical Extended JSON editor or an immutable selector preview, then a separate confirmation screen before Mongrove dispatches the write.
+
+- Insert creates exactly one document.
+- Replace uses `replace_one({"_id": original_id}, replacement, upsert=False)` and rejects a missing or changed `_id`.
+- Delete uses `delete_one({"_id": original_id})` and requires an explicit target acknowledgement before it can proceed.
+- Views, bulk writes, arbitrary write filters, upserts, and unacknowledged `w=0` writes are intentionally unsupported.
+
+`--read-only` prevents every mutation locally. Production targets are also locally read-only unless launched with `--allow-production-writes`; permitted production writes require the exact `WRITE database.collection` acknowledgement in addition to the normal confirmation. MongoDB roles remain the real authorization boundary.
 
 ## Themes
 
