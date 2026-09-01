@@ -16,6 +16,7 @@ from pymongo.errors import PyMongoError
 
 from mongrove.domain.connection import ConnectionInfo
 from mongrove.domain.explain import ExplainResult, normalize_aggregation_explain, normalize_find_explain
+from mongrove.domain.index import IndexInfo, IndexUsage, IndexUsageReport
 from mongrove.domain.namespace import CollectionInfo
 from mongrove.domain.pipeline import AggregationPipeline
 from mongrove.domain.query import FindQuery
@@ -185,6 +186,43 @@ class MongoGateway(Protocol):
         max_time_ms: int = 5_000,
     ) -> ExplainResult:
         """Return a planner-only explain for a read-only aggregation pipeline."""
+        ...
+
+    def list_indexes(self, database: str, collection: str) -> list[IndexInfo]:
+        """List collection index definitions."""
+        ...
+
+    def index_usage(
+        self,
+        database: str,
+        collection: str,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> IndexUsageReport:
+        """Return best-effort node-local $indexStats usage information."""
+        ...
+
+    def create_index(
+        self,
+        database: str,
+        collection: str,
+        keys: list[tuple[str, Any]],
+        options: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> str:
+        """Create one collection index under the supplied session write policy."""
+        ...
+
+    def drop_index(
+        self,
+        database: str,
+        collection: str,
+        name: str,
+        *,
+        policy: SessionPolicy,
+    ) -> None:
+        """Drop one named collection index under the supplied session write policy."""
         ...
 
 
@@ -528,6 +566,112 @@ class PyMongoGateway:
             raise MongoGatewayError(_driver_error_message(error)) from error
         elapsed_ms = max(round((perf_counter() - started) * 1_000), 0)
         return normalize_aggregation_explain(raw, pipeline, elapsed_ms)
+
+    def list_indexes(self, database: str, collection: str) -> list[IndexInfo]:
+        """Map PyMongo index documents into stable UI metadata."""
+
+        try:
+            raw_indexes = list(self._require_client()[database][collection].list_indexes())
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        indexes: list[IndexInfo] = []
+        for raw in raw_indexes:
+            name = raw.get("name")
+            keys = raw.get("key")
+            if not isinstance(name, str) or not isinstance(keys, dict):
+                continue
+            indexes.append(
+                IndexInfo(
+                    name=name,
+                    keys=tuple(keys.items()),
+                    unique=bool(raw.get("unique", False)),
+                    sparse=bool(raw.get("sparse", False)),
+                    hidden=bool(raw.get("hidden", False)),
+                    raw=dict(raw),
+                )
+            )
+        return sorted(indexes, key=lambda index: index.name.casefold())
+
+    def index_usage(
+        self,
+        database: str,
+        collection: str,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> IndexUsageReport:
+        """Read $indexStats when permitted without treating unavailable as zero."""
+
+        if max_time_ms < 1:
+            raise ValueError("Index usage max time must be at least one millisecond.")
+        cursor: Any = None
+        try:
+            cursor = self._require_client()[database][collection].aggregate(
+                [{"$indexStats": {}}],
+                maxTimeMS=max_time_ms,
+            )
+            entries = list(cursor)
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            return IndexUsageReport(
+                available=False,
+                message=f"Index usage is unavailable: {_driver_error_message(error)}",
+            )
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except PyMongoError:
+                    pass
+        usages: list[IndexUsage] = []
+        for entry in entries:
+            name = entry.get("name")
+            accesses = entry.get("accesses")
+            if not isinstance(name, str) or not isinstance(accesses, dict):
+                continue
+            operations = accesses.get("ops")
+            since = accesses.get("since")
+            usages.append(
+                IndexUsage(
+                    name=name,
+                    operations=operations if isinstance(operations, int) else None,
+                    since=str(since) if since is not None else None,
+                )
+            )
+        return IndexUsageReport(available=True, usages=tuple(usages))
+
+    def create_index(
+        self,
+        database: str,
+        collection: str,
+        keys: list[tuple[str, Any]],
+        options: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> str:
+        """Create one acknowledged index using ordered keys and EJSON options."""
+
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            return collection_ref.create_index(keys, **dict(options))
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+
+    def drop_index(
+        self,
+        database: str,
+        collection: str,
+        name: str,
+        *,
+        policy: SessionPolicy,
+    ) -> None:
+        """Drop exactly one named index with acknowledged write concern."""
+
+        if not name.strip():
+            raise MongoGatewayError("Index name cannot be empty.")
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            collection_ref.drop_index(name)
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
 
     def _require_client(self) -> MongoClient[dict[str, Any]]:
         if self._client is None:

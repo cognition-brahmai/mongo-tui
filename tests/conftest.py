@@ -9,6 +9,7 @@ from bson import ObjectId
 
 from mongrove.domain.connection import ConnectionInfo
 from mongrove.domain.explain import ExplainResult, normalize_aggregation_explain, normalize_find_explain
+from mongrove.domain.index import IndexInfo, IndexUsage, IndexUsageReport
 from mongrove.domain.namespace import CollectionInfo
 from mongrove.domain.pipeline import AggregationPipeline
 from mongrove.domain.query import FindQuery
@@ -38,6 +39,26 @@ class FakeGateway:
         self.aggregation_calls: list[tuple[str, str, AggregationPipeline, int, int]] = []
         self.find_explain_calls: list[tuple[str, str, FindQuery, int]] = []
         self.aggregation_explain_calls: list[tuple[str, str, AggregationPipeline, int]] = []
+        self.index_create_calls: list[tuple[str, str, list[tuple[str, Any]], dict[str, Any]]] = []
+        self.index_drop_calls: list[tuple[str, str, str]] = []
+        self.indexes: list[IndexInfo] = [
+            IndexInfo(
+                name="_id_",
+                keys=(("_id", 1),),
+                unique=True,
+                sparse=False,
+                hidden=False,
+                raw={"name": "_id_", "key": {"_id": 1}, "unique": True},
+            ),
+            IndexInfo(
+                name="status_1",
+                keys=(("status", 1),),
+                unique=False,
+                sparse=False,
+                hidden=False,
+                raw={"name": "status_1", "key": {"status": 1}},
+            ),
+        ]
         self.documents: list[dict[str, Any]] = [
             {
                 "_id": ObjectId("65ba0aa00000000000000001"),
@@ -231,6 +252,65 @@ class FakeGateway:
             ]
         }
         return normalize_aggregation_explain(raw, pipeline, 4)
+
+    def list_indexes(self, database: str, collection: str) -> list[IndexInfo]:
+        return deepcopy(self.indexes)
+
+    def index_usage(
+        self,
+        database: str,
+        collection: str,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> IndexUsageReport:
+        return IndexUsageReport(
+            available=True,
+            usages=(
+                IndexUsage(name="_id_", operations=7, since="2026-09-01T00:00:00Z"),
+                IndexUsage(name="status_1", operations=3, since="2026-09-01T00:00:00Z"),
+            ),
+        )
+
+    def create_index(
+        self,
+        database: str,
+        collection: str,
+        keys: list[tuple[str, Any]],
+        options: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> str:
+        self._assert_writes_allowed(policy)
+        self.index_create_calls.append((database, collection, deepcopy(keys), deepcopy(options)))
+        configured_name = options.get("name")
+        name = (
+            configured_name
+            if isinstance(configured_name, str)
+            else "_".join(f"{field}_{value}" for field, value in keys)
+        )
+        self.indexes.append(
+            IndexInfo(
+                name=name,
+                keys=tuple(keys),
+                unique=bool(options.get("unique", False)),
+                sparse=bool(options.get("sparse", False)),
+                hidden=bool(options.get("hidden", False)),
+                raw={"name": name, "key": dict(keys), **deepcopy(options)},
+            )
+        )
+        return name
+
+    def drop_index(
+        self,
+        database: str,
+        collection: str,
+        name: str,
+        *,
+        policy: SessionPolicy,
+    ) -> None:
+        self._assert_writes_allowed(policy)
+        self.index_drop_calls.append((database, collection, name))
+        self.indexes = [index for index in self.indexes if index.name != name]
 
     @staticmethod
     def _assert_writes_allowed(policy: SessionPolicy) -> None:

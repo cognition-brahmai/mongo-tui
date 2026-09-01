@@ -218,6 +218,27 @@ Footer {
     padding: 1 2;
 }
 
+#indexes-dialog {
+    width: 110;
+    max-width: 96%;
+    height: 90%;
+    margin: 2 4;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
+#index-editor-dialog,
+#index-confirmation-dialog {
+    width: 96;
+    max-width: 96%;
+    height: 88%;
+    margin: 3 6;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
 .integer-options {
     height: auto;
 }
@@ -270,6 +291,19 @@ Footer {
 }
 
 #explain-actions Button {
+    margin-right: 1;
+}
+
+#indexes-actions,
+#index-editor-actions,
+#index-confirmation-actions {
+    height: auto;
+    margin-top: 1;
+}
+
+#indexes-actions Button,
+#index-editor-actions Button,
+#index-confirmation-actions Button {
     margin-right: 1;
 }
 
@@ -344,6 +378,38 @@ Footer {
     height: 1fr;
     border: round $secondary;
     padding: 1;
+}
+
+#indexes-help,
+#indexes-status,
+#index-editor-help,
+#index-editor-status,
+#index-confirmation-target,
+#index-confirmation-help,
+#index-confirmation-status {
+    color: $text-muted;
+    min-height: 1;
+    margin-top: 1;
+}
+
+#indexes-table {
+    height: 12;
+    border: round $secondary;
+    margin-top: 1;
+}
+
+#index-inspector {
+    height: 1fr;
+    border: round $secondary;
+    padding: 1;
+}
+
+#index-keys,
+#index-options,
+#index-confirmation-preview {
+    height: 1fr;
+    border: round $secondary;
+    margin-top: 1;
 }
 
 #pipeline-editor {
@@ -433,6 +499,13 @@ Screen.-narrow #aggregation-dialog {
 }
 
 Screen.-narrow #explain-dialog {
+    width: 94%;
+    margin: 1 1;
+}
+
+Screen.-narrow #indexes-dialog,
+Screen.-narrow #index-editor-dialog,
+Screen.-narrow #index-confirmation-dialog {
     width: 94%;
     margin: 1 1;
 }
