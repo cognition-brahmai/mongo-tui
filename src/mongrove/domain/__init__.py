@@ -2,6 +2,7 @@
 
 from mongrove.domain.connection import ConnectionInfo, ConnectionProfile
 from mongrove.domain.explain import ExplainFragment, ExplainResult, ExplainWarning
+from mongrove.domain.index import IndexInfo, IndexUsage, IndexUsageReport
 from mongrove.domain.pipeline import AggregationPipeline, PipelineValidationError, parse_pipeline
 from mongrove.domain.query import FindQuery, QueryFormState, QueryValidationError
 from mongrove.domain.session import SessionPolicy, normalize_environment
@@ -14,6 +15,9 @@ __all__ = [
     "ExplainResult",
     "ExplainWarning",
     "FindQuery",
+    "IndexInfo",
+    "IndexUsage",
+    "IndexUsageReport",
     "PipelineValidationError",
     "QueryFormState",
     "QueryValidationError",

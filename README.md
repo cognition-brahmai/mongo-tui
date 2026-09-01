@@ -61,12 +61,13 @@ Supported environment settings are `MONGROVE_URI`, `MONGROVE_PROFILE`, `MONGROVE
 | Export | Streaming query exports as JSON, canonical EJSON, or BSON-safe CSV. |
 | Aggregation | Raw JSON/EJSON pipeline editor with bounded result previews and BSON-aware inspection. |
 | Explain | Planner-only find and aggregation explain views with normalized warnings and raw EJSON. |
+| Indexes | Index inventory, node-local usage reporting, confirmed creation, and typed-confirmed drop. |
 | Queries | JSON/Extended JSON filter, projection, sort, collation, skip, limit, and `maxTimeMS`. |
 | History | Bounded per-target query history with search, names, favorites, filter copy, deletion, and safe full-state restore. |
 | Themes | Four Mongrove themes, curated Textual themes, a keyboard picker, and saved preference. |
 | Input | Keyboard-first workflows with optional mouse click, wheel, and header-sort support. |
 
-The current release focuses on safe exploration, deliberately confirmed single-document changes, bounded-memory exports, and aggregation previews. Schema analysis, index management, validation, import, and live performance monitoring are planned next.
+The current release focuses on safe exploration, deliberately confirmed single-document changes, bounded-memory exports, aggregation previews, and practical index management. Schema analysis, validation, import, and live performance monitoring are planned next.
 
 ## First Session
 
@@ -145,6 +146,12 @@ The editor detects `$out` and `$merge` and refuses to run them. Those pipeline s
 Use **Explain** from the collection toolbar or **Explain Pipeline** in the aggregation editor to inspect planner-only explain output. Mongrove shows the normalized winning-plan stages, indexes, rejected-plan count, and evidence-based observations such as `COLLSCAN`, `SORT`, and `SHARD_MERGE`, while retaining the raw EJSON response for version-specific details.
 
 Explain requests use a 5-second server cap and do not collect execution statistics or all-plans execution data. They are diagnostic planner evidence, not a normal-execution timing benchmark: MongoDB explain does not use the ordinary plan-cache path. Raw explain responses are never added to query history.
+
+## Index Management
+
+Use **Indexes** or `Ctrl+P` from an active collection to inspect index key patterns, uniqueness/sparse/hidden flags, raw specifications, and `$indexStats` usage. Usage is explicitly labelled unavailable when the server or account does not support it; it is node-local and resets after a server restart, so it is not a global lifetime count.
+
+**Create Index** accepts ordered JSON/EJSON keys and options, then presents the exact definition for confirmation. **Drop Selected** only drops the selected named index and requires `DROP index_name` outside production, or the production `WRITE database.collection` acknowledgement when production writes have been explicitly enabled. Views and read-only sessions cannot mutate indexes.
 
 ## Themes
 

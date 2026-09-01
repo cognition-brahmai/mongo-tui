@@ -30,6 +30,7 @@ from mongrove.ui.commands import CommandAction
 from mongrove.ui.screens.document import DocumentScreen
 from mongrove.ui.screens.document_editor import DocumentEditorScreen, DocumentWriteDraft
 from mongrove.ui.screens.explain import ExplainScreen
+from mongrove.ui.screens.indexes import IndexScreen
 from mongrove.ui.screens.aggregation import AggregationScreen
 from mongrove.ui.screens.export import ExportScreen
 from mongrove.ui.screens.mutation_confirmation import (
@@ -109,6 +110,7 @@ class BrowserScreen(Screen[None]):
                     yield Button("Export", id="export-query")
                     yield Button("Aggregate", id="open-aggregation")
                     yield Button("Explain", id="explain-query")
+                    yield Button("Indexes", id="open-indexes")
                 yield Static("Select a collection to query.", id="query-status")
                 with Horizontal(id="write-actions"):
                     yield Button("Insert", id="insert-document", disabled=True)
@@ -195,6 +197,13 @@ class BrowserScreen(Screen[None]):
         )
         commands.append(
             CommandAction(
+                "Manage indexes",
+                "List index definitions, usage information, and confirmed index actions",
+                self.action_open_indexes,
+            )
+        )
+        commands.append(
+            CommandAction(
                 "Explain active query",
                 "Inspect the bounded planner-only explain for the active find query",
                 self.action_explain_query,
@@ -268,6 +277,7 @@ class BrowserScreen(Screen[None]):
             "export-query": self.action_export_query,
             "open-aggregation": self.action_open_aggregation,
             "explain-query": self.action_explain_query,
+            "open-indexes": self.action_open_indexes,
             "insert-document": self.action_insert_document,
             "replace-document": self.action_replace_selected_document,
             "delete-document": self.action_delete_selected_document,
@@ -556,6 +566,20 @@ class BrowserScreen(Screen[None]):
             return
         self.app.push_screen(
             ExplainScreen("find", self._active_database, self._active_collection, query)
+        )
+
+    def action_open_indexes(self) -> None:
+        """Open index inventory and management for the active collection."""
+
+        if self._active_database is None or self._active_collection is None:
+            self._set_query_status("Select a collection before managing indexes.", error=True)
+            return
+        self.app.push_screen(
+            IndexScreen(
+                self._active_database,
+                self._active_collection,
+                writable_collection=self._collection_kind != "view",
+            )
         )
 
     def action_disconnect(self) -> None:
