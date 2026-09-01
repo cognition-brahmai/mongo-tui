@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Protocol
 
+from bson.errors import BSONError
 from pymongo import MongoClient
 from pymongo.collation import Collation
 from pymongo.errors import PyMongoError
@@ -14,6 +15,7 @@ from pymongo.errors import PyMongoError
 from mongrove.domain.connection import ConnectionInfo
 from mongrove.domain.namespace import CollectionInfo
 from mongrove.domain.query import FindQuery
+from mongrove.domain.session import SessionPolicy
 
 
 class MongoGatewayError(RuntimeError):
@@ -28,6 +30,28 @@ class DocumentsPage:
     has_more: bool
     elapsed_ms: int
     skip: int
+
+
+@dataclass(frozen=True, slots=True)
+class InsertDocumentResult:
+    """Acknowledged result of inserting one document."""
+
+    inserted_id: Any
+
+
+@dataclass(frozen=True, slots=True)
+class ReplaceDocumentResult:
+    """Acknowledged result of replacing one selected document."""
+
+    matched_count: int
+    modified_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteDocumentResult:
+    """Acknowledged result of deleting one selected document."""
+
+    deleted_count: int
 
 
 class MongoGateway(Protocol):
@@ -59,6 +83,40 @@ class MongoGateway(Protocol):
         page_size: int,
     ) -> DocumentsPage:
         """Fetch one bounded page of documents."""
+        ...
+
+    def insert_document(
+        self,
+        database: str,
+        collection: str,
+        document: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> InsertDocumentResult:
+        """Insert one document under the supplied session write policy."""
+        ...
+
+    def replace_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        replacement: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> ReplaceDocumentResult:
+        """Replace one document selected by its immutable _id."""
+        ...
+
+    def delete_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        *,
+        policy: SessionPolicy,
+    ) -> DeleteDocumentResult:
+        """Delete one document selected by its immutable _id."""
         ...
 
 
@@ -169,10 +227,85 @@ class PyMongoGateway:
             documents = documents[:page_size]
         return DocumentsPage(documents, has_more, elapsed_ms, cursor_skip)
 
+    def insert_document(
+        self,
+        database: str,
+        collection: str,
+        document: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> InsertDocumentResult:
+        """Insert one document with an acknowledged write concern."""
+
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            result = collection_ref.insert_one(dict(document))
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        return InsertDocumentResult(inserted_id=result.inserted_id)
+
+    def replace_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        replacement: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> ReplaceDocumentResult:
+        """Replace exactly one document using its original immutable _id."""
+
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            result = collection_ref.replace_one(
+                {"_id": original_id},
+                dict(replacement),
+                upsert=False,
+            )
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        return ReplaceDocumentResult(
+            matched_count=result.matched_count,
+            modified_count=result.modified_count,
+        )
+
+    def delete_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        *,
+        policy: SessionPolicy,
+    ) -> DeleteDocumentResult:
+        """Delete exactly one document using its original immutable _id."""
+
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            result = collection_ref.delete_one({"_id": original_id})
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        return DeleteDocumentResult(deleted_count=result.deleted_count)
+
     def _require_client(self) -> MongoClient[dict[str, Any]]:
         if self._client is None:
             raise MongoGatewayError("No active MongoDB connection.")
         return self._client
+
+    def _write_collection(
+        self,
+        database: str,
+        collection: str,
+        policy: SessionPolicy,
+    ) -> Any:
+        reason = policy.write_block_reason
+        if reason is not None:
+            raise MongoGatewayError(reason)
+        collection_ref = self._require_client()[database][collection]
+        if not collection_ref.write_concern.acknowledged:
+            raise MongoGatewayError(
+                "Mongrove requires acknowledged writes; unacknowledged w=0 writes are unsupported."
+            )
+        return collection_ref
 
 
 _URI_CREDENTIALS = re.compile(r"(mongodb(?:\+srv)?://)([^@/]+)@", re.IGNORECASE)

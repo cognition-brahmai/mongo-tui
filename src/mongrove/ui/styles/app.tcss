@@ -166,10 +166,21 @@ Footer {
     margin-right: 1;
 }
 
+#write-actions {
+    height: auto;
+    margin-top: 1;
+}
+
+#write-actions Button {
+    margin-right: 1;
+}
+
 #query-options-dialog,
 #document-dialog,
 #theme-picker-dialog,
-#query-history-dialog {
+#query-history-dialog,
+#document-editor-dialog,
+#mutation-confirmation-dialog {
     width: 76;
     max-width: 96%;
     height: auto;
@@ -178,6 +189,12 @@ Footer {
     border: thick $primary;
     background: $surface;
     padding: 1 2;
+}
+
+#document-editor-dialog,
+#mutation-confirmation-dialog {
+    width: 96;
+    height: 88%;
 }
 
 .integer-options {
@@ -192,7 +209,9 @@ Footer {
 #query-options-actions,
 #document-actions,
 #theme-picker-actions,
-#query-history-actions {
+#query-history-actions,
+#document-editor-actions,
+#mutation-confirmation-actions {
     height: auto;
     margin-top: 1;
 }
@@ -200,7 +219,9 @@ Footer {
 #query-options-actions Button,
 #document-actions Button,
 #theme-picker-actions Button,
-#query-history-actions Button {
+#query-history-actions Button,
+#document-editor-actions Button,
+#mutation-confirmation-actions Button {
     margin-right: 1;
 }
 
@@ -224,6 +245,24 @@ Footer {
 #history-status {
     color: $text-muted;
     min-height: 2;
+    margin-top: 1;
+}
+
+#document-editor-help,
+#editor-status,
+#mutation-target,
+#mutation-help,
+#mutation-confirmation-note,
+#mutation-status {
+    color: $text-muted;
+    min-height: 1;
+    margin-top: 1;
+}
+
+#document-editor,
+#mutation-preview {
+    height: 1fr;
+    border: round $secondary;
     margin-top: 1;
 }
 
@@ -268,7 +307,9 @@ Screen.-narrow #connection-form {
 Screen.-narrow #query-options-dialog,
 Screen.-narrow #document-dialog,
 Screen.-narrow #theme-picker-dialog,
-Screen.-narrow #query-history-dialog {
+Screen.-narrow #query-history-dialog,
+Screen.-narrow #document-editor-dialog,
+Screen.-narrow #mutation-confirmation-dialog {
     width: 94%;
     margin: 1 1;
 }
