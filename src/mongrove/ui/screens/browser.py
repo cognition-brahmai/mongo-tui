@@ -29,6 +29,7 @@ from mongrove.services.query_history import QueryHistoryEntry, QueryHistoryStore
 from mongrove.ui.commands import CommandAction
 from mongrove.ui.screens.document import DocumentScreen
 from mongrove.ui.screens.document_editor import DocumentEditorScreen, DocumentWriteDraft
+from mongrove.ui.screens.explain import ExplainScreen
 from mongrove.ui.screens.aggregation import AggregationScreen
 from mongrove.ui.screens.export import ExportScreen
 from mongrove.ui.screens.mutation_confirmation import (
@@ -107,6 +108,7 @@ class BrowserScreen(Screen[None]):
                     yield Button("History", id="query-history")
                     yield Button("Export", id="export-query")
                     yield Button("Aggregate", id="open-aggregation")
+                    yield Button("Explain", id="explain-query")
                 yield Static("Select a collection to query.", id="query-status")
                 with Horizontal(id="write-actions"):
                     yield Button("Insert", id="insert-document", disabled=True)
@@ -191,6 +193,13 @@ class BrowserScreen(Screen[None]):
                 self.action_open_aggregation,
             )
         )
+        commands.append(
+            CommandAction(
+                "Explain active query",
+                "Inspect the bounded planner-only explain for the active find query",
+                self.action_explain_query,
+            )
+        )
         if self.mongrove_app.query_history.enabled:
             commands.append(
                 CommandAction(
@@ -258,6 +267,7 @@ class BrowserScreen(Screen[None]):
             "query-history": self.action_open_query_history,
             "export-query": self.action_export_query,
             "open-aggregation": self.action_open_aggregation,
+            "explain-query": self.action_explain_query,
             "insert-document": self.action_insert_document,
             "replace-document": self.action_replace_selected_document,
             "delete-document": self.action_delete_selected_document,
@@ -526,6 +536,26 @@ class BrowserScreen(Screen[None]):
             return
         self.app.push_screen(
             AggregationScreen(self._active_database, self._active_collection)
+        )
+
+    def action_explain_query(self) -> None:
+        """Open a planner-only explain for an immutable active find-query snapshot."""
+
+        if self._active_database is None or self._active_collection is None:
+            self._set_query_status("Select a collection before explaining a query.", error=True)
+            return
+        state = replace(
+            self._query_state,
+            filter_text=self.query_one("#filter-input", Input).value,
+        )
+        try:
+            query = parse_find_query(state)
+        except QueryValidationError as error:
+            self._set_query_status(str(error), error=True)
+            self.query_one("#filter-input", Input).focus()
+            return
+        self.app.push_screen(
+            ExplainScreen("find", self._active_database, self._active_collection, query)
         )
 
     def action_disconnect(self) -> None:

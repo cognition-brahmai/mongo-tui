@@ -9,11 +9,13 @@ from time import perf_counter
 from typing import Any, Protocol
 
 from bson.errors import BSONError
+from bson.son import SON
 from pymongo import MongoClient
 from pymongo.collation import Collation
 from pymongo.errors import PyMongoError
 
 from mongrove.domain.connection import ConnectionInfo
+from mongrove.domain.explain import ExplainResult, normalize_aggregation_explain, normalize_find_explain
 from mongrove.domain.namespace import CollectionInfo
 from mongrove.domain.pipeline import AggregationPipeline
 from mongrove.domain.query import FindQuery
@@ -161,6 +163,28 @@ class MongoGateway(Protocol):
         max_time_ms: int = 60_000,
     ) -> AggregationPage:
         """Run a bounded read-only aggregation preview."""
+        ...
+
+    def explain_find(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        """Return a planner-only explain for the logical active find query."""
+        ...
+
+    def explain_aggregation(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        """Return a planner-only explain for a read-only aggregation pipeline."""
         ...
 
 
@@ -425,6 +449,85 @@ class PyMongoGateway:
         if has_more:
             documents = documents[:page_size]
         return AggregationPage(documents=documents, has_more=has_more, elapsed_ms=elapsed_ms)
+
+    def explain_find(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        """Use the command API to request a bounded planner-only find explain."""
+
+        if max_time_ms < 1:
+            raise ValueError("Explain max time must be at least one millisecond.")
+        client = self._require_client()
+        collection_ref = client[database][collection]
+        command: dict[str, Any] = SON((("find", collection), ("filter", query.filter)))
+        if query.projection is not None:
+            command["projection"] = query.projection
+        if query.sort:
+            command["sort"] = SON(query.sort)
+        if query.collation is not None:
+            command["collation"] = query.collation
+        if query.skip:
+            command["skip"] = query.skip
+        if query.limit is not None:
+            command["limit"] = query.limit
+        command["maxTimeMS"] = min(query.max_time_ms, max_time_ms)
+        started = perf_counter()
+        try:
+            raw = client[database].command(
+                "explain",
+                command,
+                verbosity="queryPlanner",
+                read_preference=collection_ref.read_preference,
+            )
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        elapsed_ms = max(round((perf_counter() - started) * 1_000), 0)
+        return normalize_find_explain(raw, query, elapsed_ms)
+
+    def explain_aggregation(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        """Use the command API to request a planner-only aggregation explain."""
+
+        if pipeline.has_write_stage:
+            stages = ", ".join(pipeline.write_stages)
+            raise MongoGatewayError(
+                f"Aggregation write stages are not available in explains: {stages}."
+            )
+        if max_time_ms < 1:
+            raise ValueError("Explain max time must be at least one millisecond.")
+        client = self._require_client()
+        collection_ref = client[database][collection]
+        command: dict[str, Any] = SON(
+            (
+                ("aggregate", collection),
+                ("pipeline", list(pipeline.stages)),
+                ("cursor", {}),
+                ("maxTimeMS", max_time_ms),
+            )
+        )
+        started = perf_counter()
+        try:
+            raw = client[database].command(
+                "explain",
+                command,
+                verbosity="queryPlanner",
+                read_preference=collection_ref.read_preference,
+            )
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        elapsed_ms = max(round((perf_counter() - started) * 1_000), 0)
+        return normalize_aggregation_explain(raw, pipeline, elapsed_ms)
 
     def _require_client(self) -> MongoClient[dict[str, Any]]:
         if self._client is None:

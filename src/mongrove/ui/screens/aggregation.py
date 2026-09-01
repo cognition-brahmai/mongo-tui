@@ -15,6 +15,7 @@ from mongrove.domain.pipeline import AggregationPipeline, PipelineValidationErro
 from mongrove.services.bson_codec import format_cell
 from mongrove.services.mongo_gateway import AggregationPage, MongoGatewayError
 from mongrove.ui.commands import CommandAction
+from mongrove.ui.screens.explain import ExplainScreen
 from mongrove.ui.widgets.document_table import DocumentTable
 from mongrove.ui.widgets.document_viewer import DocumentJsonViewer
 
@@ -64,6 +65,7 @@ class AggregationScreen(ModalScreen[None]):
             )
             with Horizontal(id="aggregation-actions"):
                 yield Button("Run Preview", id="run-aggregation", variant="primary")
+                yield Button("Explain Pipeline", id="explain-aggregation")
                 yield Button("Copy Pipeline", id="copy-pipeline")
                 yield Button("Close", id="close-aggregation")
             yield Static("Enter a pipeline and run a preview.", id="aggregation-status")
@@ -81,6 +83,7 @@ class AggregationScreen(ModalScreen[None]):
 
         return (
             CommandAction("Run aggregation preview", "Validate and run the raw pipeline", self.action_run),
+            CommandAction("Explain aggregation pipeline", "Inspect planner-only pipeline details", self.action_explain),
             CommandAction("Copy aggregation pipeline", "Copy raw JSON/EJSON pipeline text", self.action_copy_pipeline),
             CommandAction("Close aggregation editor", "Return to collection results", self.action_close),
         )
@@ -88,6 +91,8 @@ class AggregationScreen(ModalScreen[None]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "run-aggregation":
             self.action_run()
+        elif event.button.id == "explain-aggregation":
+            self.action_explain()
         elif event.button.id == "copy-pipeline":
             self.action_copy_pipeline()
         elif event.button.id == "close-aggregation":
@@ -122,6 +127,25 @@ class AggregationScreen(ModalScreen[None]):
     def action_copy_pipeline(self) -> None:
         self.app.copy_to_clipboard(self.query_one("#pipeline-editor", TextArea).text)
         self.notify("Pipeline copy requested through the terminal clipboard protocol.")
+
+    def action_explain(self) -> None:
+        """Open planner-only explain for the immutable parsed pipeline."""
+
+        try:
+            pipeline = parse_pipeline(self.query_one("#pipeline-editor", TextArea).text)
+        except PipelineValidationError as error:
+            self._set_status(str(error), error=True)
+            return
+        if pipeline.has_write_stage:
+            stages = ", ".join(pipeline.write_stages)
+            self._set_status(
+                f"{stages} writes are blocked here; explain was not dispatched.",
+                error=True,
+            )
+            return
+        self.app.push_screen(
+            ExplainScreen("aggregation", self._database, self._collection, pipeline)
+        )
 
     def action_close(self) -> None:
         self.dismiss(None)

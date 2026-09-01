@@ -208,6 +208,16 @@ Footer {
     padding: 1 2;
 }
 
+#explain-dialog {
+    width: 110;
+    max-width: 96%;
+    height: 90%;
+    margin: 2 4;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
 .integer-options {
     height: auto;
 }
@@ -251,6 +261,15 @@ Footer {
 }
 
 #aggregation-actions Button {
+    margin-right: 1;
+}
+
+#explain-actions {
+    height: auto;
+    margin-top: 1;
+}
+
+#explain-actions Button {
     margin-right: 1;
 }
 
@@ -306,6 +325,25 @@ Footer {
     color: $text-muted;
     min-height: 1;
     margin-top: 1;
+}
+
+#explain-help,
+#explain-warnings {
+    color: $text-muted;
+    min-height: 1;
+    margin-top: 1;
+}
+
+#explain-table {
+    height: 12;
+    border: round $secondary;
+    margin-top: 1;
+}
+
+#explain-raw {
+    height: 1fr;
+    border: round $secondary;
+    padding: 1;
 }
 
 #pipeline-editor {
@@ -390,6 +428,11 @@ Screen.-narrow #export-dialog {
 }
 
 Screen.-narrow #aggregation-dialog {
+    width: 94%;
+    margin: 1 1;
+}
+
+Screen.-narrow #explain-dialog {
     width: 94%;
     margin: 1 1;
 }
