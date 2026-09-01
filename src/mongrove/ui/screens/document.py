@@ -11,6 +11,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Label
 
 from mongrove.services.bson_codec import to_extended_json
+from mongrove.ui.commands import CommandAction
 from mongrove.ui.widgets.document_viewer import DocumentJsonViewer
 
 
@@ -34,6 +35,14 @@ class DocumentScreen(ModalScreen[None]):
             with Horizontal(id="document-actions"):
                 yield Button("Copy JSON", id="copy-document")
                 yield Button("Close", id="close-document", variant="primary")
+
+    def get_command_actions(self) -> tuple[CommandAction, ...]:
+        """Expose modal actions without requiring mouse access."""
+
+        return (
+            CommandAction("Copy document JSON", "Copy relaxed Extended JSON", self.action_copy),
+            CommandAction("Close document", "Return to query results", self.action_close),
+        )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "copy-document":

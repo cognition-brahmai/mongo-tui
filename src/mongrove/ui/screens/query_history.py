@@ -15,6 +15,7 @@ from textual.widgets import Button, DataTable, Input, Label, Static
 
 from mongrove.domain.query import QueryFormState
 from mongrove.services.query_history import QueryHistoryEntry, QueryHistoryStoreError
+from mongrove.ui.commands import CommandAction
 
 if TYPE_CHECKING:
     from mongrove.ui.app import MongroveApp
@@ -86,6 +87,22 @@ class QueryHistoryScreen(ModalScreen[QueryFormState | None]):
         table.add_column("Options", width=24)
         table.add_column("Last used", width=18)
         self._render_entries()
+
+    def get_command_actions(self) -> tuple[CommandAction, ...]:
+        """Expose history operations while this modal owns the palette."""
+
+        return (
+            CommandAction("Load saved query", "Restore the selected find form", self.action_load),
+            CommandAction(
+                "Favorite saved query",
+                "Toggle retention of the selected query",
+                self.action_toggle_favorite,
+            ),
+            CommandAction("Save query name", "Name or clear the selected query", self.action_save_name),
+            CommandAction("Copy saved filter", "Copy the selected filter JSON", self.action_copy_filter),
+            CommandAction("Delete saved query", "Remove the selected local history entry", self.action_delete),
+            CommandAction("Close query history", "Return without loading a query", self.action_cancel),
+        )
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "history-search":
