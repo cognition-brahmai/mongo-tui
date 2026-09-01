@@ -87,6 +87,7 @@ class MongroveApp(App[None]):
             no_history=no_history,
         )
         self.connection_info: ConnectionInfo | None = None
+        self.export_in_progress = False
 
     @property
     def read_only(self) -> bool:
@@ -208,5 +209,8 @@ class MongroveApp(App[None]):
     async def action_quit(self) -> None:
         """Close the driver client before restoring the terminal."""
 
+        if self.export_in_progress:
+            self.notify("Wait for export cleanup to finish before quitting.", severity="warning")
+            return
         self.gateway.disconnect()
         self.exit()

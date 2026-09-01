@@ -17,6 +17,7 @@ from mongrove.domain.namespace import CollectionInfo, NamespaceTreeItem
 from mongrove.domain.query import FindQuery, QueryFormState, QueryValidationError, parse_find_query
 from mongrove.domain.session import SessionPolicy
 from mongrove.services.bson_codec import format_cell
+from mongrove.services.import_export import ExportResult
 from mongrove.services.mongo_gateway import (
     DeleteDocumentResult,
     DocumentsPage,
@@ -28,6 +29,7 @@ from mongrove.services.query_history import QueryHistoryEntry, QueryHistoryStore
 from mongrove.ui.commands import CommandAction
 from mongrove.ui.screens.document import DocumentScreen
 from mongrove.ui.screens.document_editor import DocumentEditorScreen, DocumentWriteDraft
+from mongrove.ui.screens.export import ExportScreen
 from mongrove.ui.screens.mutation_confirmation import (
     MutationConfirmationResult,
     MutationConfirmationScreen,
@@ -102,6 +104,7 @@ class BrowserScreen(Screen[None]):
                     yield Button("Run", id="run-query", variant="primary")
                     yield Button("Options", id="query-options")
                     yield Button("History", id="query-history")
+                    yield Button("Export", id="export-query")
                 yield Static("Select a collection to query.", id="query-status")
                 with Horizontal(id="write-actions"):
                     yield Button("Insert", id="insert-document", disabled=True)
@@ -171,6 +174,14 @@ class BrowserScreen(Screen[None]):
                 ),
             )
         )
+        if not self._mutation_in_flight:
+            commands.append(
+                CommandAction(
+                    "Export active query",
+                    "Stream every matching document to JSON, EJSON, or CSV",
+                    self.action_export_query,
+                )
+            )
         if self.mongrove_app.query_history.enabled:
             commands.append(
                 CommandAction(
@@ -236,6 +247,7 @@ class BrowserScreen(Screen[None]):
             "run-query": self.action_run_query,
             "query-options": self.action_open_query_options,
             "query-history": self.action_open_query_history,
+            "export-query": self.action_export_query,
             "insert-document": self.action_insert_document,
             "replace-document": self.action_replace_selected_document,
             "delete-document": self.action_delete_selected_document,
@@ -466,9 +478,39 @@ class BrowserScreen(Screen[None]):
             self._active_collection,
         )
 
-    def action_disconnect(self) -> None:
+    def action_export_query(self) -> None:
+        """Open a streaming export modal for an immutable active-query snapshot."""
+
         if self._mutation_in_flight:
-            self._set_query_status("Wait for the document mutation to finish before disconnecting.")
+            self._set_query_status("Wait for the document mutation to finish before exporting.")
+            return
+        if self.namespace is None or self._active_database is None or self._active_collection is None:
+            self._set_query_status("Select a collection before exporting.", error=True)
+            return
+        state = replace(
+            self._query_state,
+            filter_text=self.query_one("#filter-input", Input).value,
+        )
+        try:
+            query = parse_find_query(state)
+        except QueryValidationError as error:
+            self._set_query_status(str(error), error=True)
+            self.query_one("#filter-input", Input).focus()
+            return
+        self.app.push_screen(
+            ExportScreen(
+                database=self._active_database,
+                collection=self._active_collection,
+                query=query,
+                csv_columns=_document_columns(self._documents),
+                connection_indicator=self.mongrove_app.connection_indicator(),
+            ),
+            self._export_closed,
+        )
+
+    def action_disconnect(self) -> None:
+        if self._mutation_in_flight or self.mongrove_app.export_in_progress:
+            self._set_query_status("Wait for active mutation or export cleanup before disconnecting.")
             return
         self.mongrove_app.gateway.disconnect()
         self.mongrove_app.connection_info = None
@@ -482,6 +524,8 @@ class BrowserScreen(Screen[None]):
             return "MongoDB views are not writable."
         if self._mutation_in_flight:
             return "Another document mutation is already in progress."
+        if self.mongrove_app.export_in_progress:
+            return "Wait for export cleanup to finish before changing documents."
         return self.mongrove_app.session_policy.write_block_reason
 
     def _ensure_mutation_allowed(self) -> bool:
@@ -954,6 +998,13 @@ class BrowserScreen(Screen[None]):
         self._sort_direction = 1
         self.query_one("#filter-input", Input).value = state.filter_text
         self._set_query_status("Historical query loaded. Press F5 or Run to execute.")
+
+    def _export_closed(self, result: ExportResult | None) -> None:
+        if result is None:
+            return
+        self.notify(
+            f"Exported {result.documents_written:,} documents to {result.destination}."
+        )
 
 
 def _document_columns(documents: list[dict[str, Any]], *, maximum: int = 8) -> list[str]:

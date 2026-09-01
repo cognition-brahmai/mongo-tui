@@ -180,7 +180,8 @@ Footer {
 #theme-picker-dialog,
 #query-history-dialog,
 #document-editor-dialog,
-#mutation-confirmation-dialog {
+#mutation-confirmation-dialog,
+#export-dialog {
     width: 76;
     max-width: 96%;
     height: auto;
@@ -225,6 +226,15 @@ Footer {
     margin-right: 1;
 }
 
+#export-actions {
+    height: auto;
+    margin-top: 1;
+}
+
+#export-actions Button {
+    margin-right: 1;
+}
+
 #options-status {
     color: $text-muted;
     min-height: 2;
@@ -257,6 +267,19 @@ Footer {
     color: $text-muted;
     min-height: 1;
     margin-top: 1;
+}
+
+#export-target,
+#export-query-summary,
+#export-warning,
+#export-status {
+    color: $text-muted;
+    min-height: 1;
+    margin-top: 1;
+}
+
+#export-warning {
+    color: $warning;
 }
 
 #document-editor,
@@ -309,7 +332,8 @@ Screen.-narrow #document-dialog,
 Screen.-narrow #theme-picker-dialog,
 Screen.-narrow #query-history-dialog,
 Screen.-narrow #document-editor-dialog,
-Screen.-narrow #mutation-confirmation-dialog {
+Screen.-narrow #mutation-confirmation-dialog,
+Screen.-narrow #export-dialog {
     width: 94%;
     margin: 1 1;
 }

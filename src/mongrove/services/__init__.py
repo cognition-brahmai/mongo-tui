@@ -2,18 +2,24 @@
 
 from mongrove.services.mongo_gateway import (
     DeleteDocumentResult,
+    FindStreamResult,
     InsertDocumentResult,
     MongoGateway,
     MongoGatewayError,
     PyMongoGateway,
     ReplaceDocumentResult,
 )
+from mongrove.services.import_export import ExportFormat, ExportRequest, ExportResult
 from mongrove.services.profile_store import ProfileStore
 from mongrove.services.query_history import QueryHistory, QueryHistoryStore
 from mongrove.services.settings_store import SettingsStore
 
 __all__ = [
     "DeleteDocumentResult",
+    "ExportFormat",
+    "ExportRequest",
+    "ExportResult",
+    "FindStreamResult",
     "InsertDocumentResult",
     "MongoGateway",
     "MongoGatewayError",

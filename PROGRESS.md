@@ -9,7 +9,7 @@ This log records the feature branches merged into `dev`. Each feature is impleme
 | Query history | `feature/query-history` | Complete |
 | Command palette actions | `feature/command-palette` | Complete |
 | Confirmed document writes | `feature/confirmed-writes` | Complete |
-| Export | `feature/export` | Planned |
+| Export | `feature/export` | Complete |
 | Aggregation pipeline editor | `feature/aggregation-editor` | Planned |
 | Explain plans | `feature/explain-plans` | Planned |
 | Index management | `feature/index-management` | Planned |
@@ -23,3 +23,4 @@ This log records the feature branches merged into `dev`. Each feature is impleme
 - 2026-09-01: Added bounded, target-scoped SQLite query history with search, restore, favorites, naming, copy, deletion, and `--no-history` enforcement on `feature/query-history`.
 - 2026-09-01: Added contextual `Ctrl+P` command-palette actions for global controls and every current connection, browser, document, query, history, and modal operation on `feature/command-palette`.
 - 2026-09-01: Added policy-gated, acknowledged single-document insert, replace, and delete workflows with canonical EJSON editors and explicit confirmation on `feature/confirmed-writes`.
+- 2026-09-01: Added atomic, streaming JSON, canonical EJSON, and BSON-safe CSV exports for full active find queries on `feature/export`.

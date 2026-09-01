@@ -58,12 +58,13 @@ Supported environment settings are `MONGROVE_URI`, `MONGROVE_PROFILE`, `MONGROVE
 | Navigation | Lazy database and collection tree navigation. |
 | Documents | Bounded result pages, dynamic table columns, BSON-aware JSON inspection, and a full-document modal. |
 | Writes | Confirmed single-document insert, replace, and delete with canonical EJSON editing. |
+| Export | Streaming query exports as JSON, canonical EJSON, or BSON-safe CSV. |
 | Queries | JSON/Extended JSON filter, projection, sort, collation, skip, limit, and `maxTimeMS`. |
 | History | Bounded per-target query history with search, names, favorites, filter copy, deletion, and safe full-state restore. |
 | Themes | Four Mongrove themes, curated Textual themes, a keyboard picker, and saved preference. |
 | Input | Keyboard-first workflows with optional mouse click, wheel, and header-sort support. |
 
-The current release focuses on safe exploration and deliberately confirmed single-document changes. Aggregation editing, schema analysis, index management, validation, import/export, and live performance monitoring are planned next.
+The current release focuses on safe exploration, deliberately confirmed single-document changes, and bounded-memory exports. Aggregation editing, schema analysis, index management, validation, import, and live performance monitoring are planned next.
 
 ## First Session
 
@@ -112,6 +113,16 @@ For ordinary collections, **Insert**, **Replace**, and **Delete** are available 
 - Views, bulk writes, arbitrary write filters, upserts, and unacknowledged `w=0` writes are intentionally unsupported.
 
 `--read-only` prevents every mutation locally. Production targets are also locally read-only unless launched with `--allow-production-writes`; permitted production writes require the exact `WRITE database.collection` acknowledgement in addition to the normal confirmation. MongoDB roles remain the real authorization boundary.
+
+## Export
+
+Use **Export** or `Ctrl+P` from an active collection to stream the full current find query to a local file. Export honors the filter, projection, sort, collation, skip, limit, and `maxTimeMS`; it does not export only the visible 25-row page.
+
+- `json` writes a valid JSON array using relaxed Extended JSON.
+- `ejson` writes a valid JSON array using canonical Extended JSON, the lossless option for BSON numeric and binary types.
+- `csv` writes explicitly selected top-level columns. Each present cell is compact canonical EJSON, so nested values and BSON types remain unambiguous. Use EJSON when you need every field without choosing CSV columns.
+
+The destination directory must already exist. Mongrove stages output in a same-directory temporary file and atomically replaces the destination only after the query finishes. Existing files require typing `OVERWRITE`; cancellation or an error removes the staged file and keeps the existing destination unchanged. Exports are not backups and do not guarantee a point-in-time snapshot.
 
 ## Themes
 
