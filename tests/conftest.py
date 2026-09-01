@@ -14,6 +14,7 @@ from mongrove.domain.session import SessionPolicy
 from mongrove.services.mongo_gateway import (
     DeleteDocumentResult,
     DocumentsPage,
+    FindStreamResult,
     InsertDocumentResult,
     MongoGatewayError,
     ReplaceDocumentResult,
@@ -30,6 +31,7 @@ class FakeGateway:
         self.insert_calls: list[tuple[str, str, dict[str, Any]]] = []
         self.replace_calls: list[tuple[str, str, Any, dict[str, Any]]] = []
         self.delete_calls: list[tuple[str, str, Any]] = []
+        self.stream_calls: list[tuple[str, str, FindQuery]] = []
         self.documents: list[dict[str, Any]] = [
             {
                 "_id": ObjectId("65ba0aa00000000000000001"),
@@ -134,6 +136,28 @@ class FakeGateway:
                 del self.documents[index]
                 return DeleteDocumentResult(deleted_count=1)
         return DeleteDocumentResult(deleted_count=0)
+
+    def stream_documents(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        consume,
+        is_cancelled,
+        batch_size: int = 100,
+    ) -> FindStreamResult:
+        self.stream_calls.append((database, collection, query))
+        documents_seen = 0
+        documents = self.documents[query.skip :]
+        if query.limit is not None:
+            documents = documents[: query.limit]
+        for document in documents:
+            if is_cancelled():
+                return FindStreamResult(documents_seen=documents_seen, cancelled=True)
+            consume(deepcopy(document))
+            documents_seen += 1
+        return FindStreamResult(documents_seen=documents_seen, cancelled=is_cancelled())
 
     @staticmethod
     def _assert_writes_allowed(policy: SessionPolicy) -> None:

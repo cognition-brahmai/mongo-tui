@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Protocol
@@ -52,6 +53,14 @@ class DeleteDocumentResult:
     """Acknowledged result of deleting one selected document."""
 
     deleted_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class FindStreamResult:
+    """Result metadata for a cursor consumed incrementally by a local sink."""
+
+    documents_seen: int
+    cancelled: bool
 
 
 class MongoGateway(Protocol):
@@ -117,6 +126,19 @@ class MongoGateway(Protocol):
         policy: SessionPolicy,
     ) -> DeleteDocumentResult:
         """Delete one document selected by its immutable _id."""
+        ...
+
+    def stream_documents(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        consume: Callable[[dict[str, Any]], None],
+        is_cancelled: Callable[[], bool],
+        batch_size: int = 100,
+    ) -> FindStreamResult:
+        """Stream every document matching a find query without materializing it."""
         ...
 
 
@@ -285,6 +307,57 @@ class PyMongoGateway:
         except (PyMongoError, BSONError, TypeError, ValueError) as error:
             raise MongoGatewayError(_driver_error_message(error)) from error
         return DeleteDocumentResult(deleted_count=result.deleted_count)
+
+    def stream_documents(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        consume: Callable[[dict[str, Any]], None],
+        is_cancelled: Callable[[], bool],
+        batch_size: int = 100,
+    ) -> FindStreamResult:
+        """Consume a cursor incrementally while honoring the complete find query."""
+
+        if batch_size < 1:
+            raise ValueError("Stream batch size must be at least one.")
+        if is_cancelled():
+            return FindStreamResult(documents_seen=0, cancelled=True)
+
+        collection_ref = self._require_client()[database][collection]
+        kwargs: dict[str, Any] = {
+            "skip": query.skip,
+            "max_time_ms": query.max_time_ms,
+        }
+        if query.limit is not None:
+            kwargs["limit"] = query.limit
+        if query.projection is not None:
+            kwargs["projection"] = query.projection
+        if query.collation is not None:
+            kwargs["collation"] = Collation(**query.collation)
+
+        cursor: Any = None
+        documents_seen = 0
+        try:
+            cursor = collection_ref.find(query.filter, **kwargs)
+            if query.sort:
+                cursor = cursor.sort(query.sort)
+            cursor = cursor.batch_size(batch_size)
+            for document in cursor:
+                if is_cancelled():
+                    return FindStreamResult(documents_seen=documents_seen, cancelled=True)
+                consume(document)
+                documents_seen += 1
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except PyMongoError:
+                    pass
+        return FindStreamResult(documents_seen=documents_seen, cancelled=is_cancelled())
 
     def _require_client(self) -> MongoClient[dict[str, Any]]:
         if self._client is None:

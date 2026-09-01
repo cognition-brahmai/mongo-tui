@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from bson import ObjectId
 
+from mongrove.domain.query import FindQuery
 from mongrove.domain.session import SessionPolicy
 from mongrove.services.mongo_gateway import MongoGatewayError, PyMongoGateway
 
@@ -16,6 +17,13 @@ class _Collection:
     def __init__(self, *, acknowledged: bool = True) -> None:
         self.write_concern = SimpleNamespace(acknowledged=acknowledged)
         self.calls: list[Any] = []
+        self.documents: list[dict[str, Any]] = []
+        self.last_cursor: _Cursor | None = None
+
+    def find(self, filter_document: dict[str, Any], **kwargs: Any) -> "_Cursor":
+        self.calls.append(("find", filter_document, kwargs))
+        self.last_cursor = _Cursor(self.documents)
+        return self.last_cursor
 
     def insert_one(self, document: dict[str, Any]) -> SimpleNamespace:
         self.calls.append(("insert", document))
@@ -34,6 +42,28 @@ class _Collection:
     def delete_one(self, selector: dict[str, Any]) -> SimpleNamespace:
         self.calls.append(("delete", selector))
         return SimpleNamespace(deleted_count=1)
+
+
+class _Cursor:
+    def __init__(self, documents: list[dict[str, Any]]) -> None:
+        self.documents = documents
+        self.sort_fields: list[tuple[str, int]] | None = None
+        self.batch_size_value: int | None = None
+        self.closed = False
+
+    def sort(self, fields: list[tuple[str, int]]) -> "_Cursor":
+        self.sort_fields = fields
+        return self
+
+    def batch_size(self, value: int) -> "_Cursor":
+        self.batch_size_value = value
+        return self
+
+    def __iter__(self):
+        return iter(self.documents)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class _Database:
@@ -97,3 +127,42 @@ def test_gateway_rejects_blocked_and_unacknowledged_writes() -> None:
     gateway._client = _Client(_Collection(acknowledged=False))  # type: ignore[assignment]
     with pytest.raises(MongoGatewayError, match="acknowledged writes"):
         gateway.delete_document("app", "customers", "id", policy=SessionPolicy())
+
+
+def test_gateway_streams_the_full_find_query_and_closes_its_cursor() -> None:
+    collection = _Collection()
+    collection.documents = [{"name": "Alice"}, {"name": "Robert"}]
+    gateway = PyMongoGateway()
+    gateway._client = _Client(collection)  # type: ignore[assignment]
+    query = FindQuery(
+        filter={"status": "active"},
+        projection={"name": 1},
+        sort=[("name", 1)],
+        collation={"locale": "en"},
+        skip=4,
+        limit=20,
+        max_time_ms=7_000,
+    )
+    consumed: list[dict[str, Any]] = []
+
+    result = gateway.stream_documents(
+        "app",
+        "customers",
+        query,
+        consume=consumed.append,
+        is_cancelled=lambda: False,
+        batch_size=50,
+    )
+
+    assert result.documents_seen == 2
+    assert result.cancelled is False
+    assert consumed == collection.documents
+    assert collection.calls[0][0:2] == ("find", {"status": "active"})
+    assert collection.calls[0][2]["skip"] == 4
+    assert collection.calls[0][2]["limit"] == 20
+    assert collection.calls[0][2]["max_time_ms"] == 7_000
+    assert collection.calls[0][2]["projection"] == {"name": 1}
+    assert collection.last_cursor is not None
+    assert collection.last_cursor.sort_fields == [("name", 1)]
+    assert collection.last_cursor.batch_size_value == 50
+    assert collection.last_cursor.closed is True
