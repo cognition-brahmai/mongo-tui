@@ -13,6 +13,7 @@ class ConnectionProfile:
     uri: str
     favorite: bool = False
     default_database: str | None = None
+    environment: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

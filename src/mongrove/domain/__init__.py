@@ -2,6 +2,7 @@
 
 from mongrove.domain.connection import ConnectionInfo, ConnectionProfile
 from mongrove.domain.query import FindQuery, QueryFormState, QueryValidationError
+from mongrove.domain.session import SessionPolicy, normalize_environment
 
 __all__ = [
     "ConnectionInfo",
@@ -9,4 +10,6 @@ __all__ = [
     "FindQuery",
     "QueryFormState",
     "QueryValidationError",
+    "SessionPolicy",
+    "normalize_environment",
 ]

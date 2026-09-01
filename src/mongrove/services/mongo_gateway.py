@@ -175,7 +175,7 @@ class PyMongoGateway:
         return self._client
 
 
-_URI_CREDENTIALS = re.compile(r"^(mongodb(?:\+srv)?://)([^@/]+)@", re.IGNORECASE)
+_URI_CREDENTIALS = re.compile(r"(mongodb(?:\+srv)?://)([^@/]+)@", re.IGNORECASE)
 
 
 def redact_connection_uri(uri: str) -> str:
@@ -190,6 +190,12 @@ def remove_uri_credentials(uri: str) -> str:
     return _URI_CREDENTIALS.sub(r"\1", uri.strip(), count=1)
 
 
+def redact_sensitive_text(value: str) -> str:
+    """Remove URI credentials when a driver error embeds a connection string."""
+
+    return _URI_CREDENTIALS.sub(r"\1***@", value)
+
+
 def _topology_from_hello(hello: dict[str, Any]) -> str:
     if hello.get("msg") == "isdbgrid":
         return "Sharded cluster"
@@ -202,4 +208,4 @@ def _driver_error_message(error: Exception) -> str:
     message = str(error).strip()
     if not message:
         return type(error).__name__
-    return message
+    return redact_sensitive_text(message)

@@ -8,6 +8,7 @@ from textual.app import App
 from textual.binding import Binding
 
 from mongrove.domain.connection import ConnectionInfo
+from mongrove.domain.session import SessionPolicy, normalize_environment
 from mongrove.services.mongo_gateway import MongoGateway, PyMongoGateway
 from mongrove.services.profile_store import ProfileStore
 from mongrove.services.settings_store import SettingsStore, SettingsStoreError
@@ -45,6 +46,8 @@ class MongroveApp(App[None]):
         no_history: bool = False,
         config_dir: Path | None = None,
         theme_name: str | None = None,
+        environment: str | None = None,
+        allow_production_writes: bool = False,
     ) -> None:
         super().__init__()
         self.gateway = gateway or PyMongoGateway()
@@ -61,9 +64,58 @@ class MongroveApp(App[None]):
         self.startup_profile = startup_profile
         self.startup_database = startup_database
         self.startup_collection = startup_collection
-        self.read_only = read_only
-        self.no_history = no_history
+        self._configured_environment = normalize_environment(environment)
+        self._requested_read_only = read_only
+        self._allow_production_writes = allow_production_writes
+        self._no_history = no_history
+        self.connection_alias: str | None = None
+        self.session_policy = SessionPolicy(
+            environment=self._configured_environment,
+            requested_read_only=read_only,
+            allow_production_writes=allow_production_writes,
+            no_history=no_history,
+        )
         self.connection_info: ConnectionInfo | None = None
+
+    @property
+    def read_only(self) -> bool:
+        """Whether the current session policy prohibits all mutations."""
+
+        return self.session_policy.writes_blocked
+
+    @property
+    def no_history(self) -> bool:
+        """Whether local query persistence is disabled for this session."""
+
+        return self.session_policy.no_history
+
+    def set_connection_context(
+        self,
+        *,
+        alias: str | None,
+        environment: str | None,
+    ) -> None:
+        """Apply the selected target label before opening a collection workspace."""
+
+        self.connection_alias = alias.strip() if alias and alias.strip() else None
+        effective_environment = normalize_environment(environment)
+        if effective_environment is None:
+            effective_environment = self._configured_environment
+        self.session_policy = SessionPolicy(
+            environment=effective_environment,
+            requested_read_only=self._requested_read_only,
+            allow_production_writes=self._allow_production_writes,
+            no_history=self._no_history,
+        )
+
+    def connection_indicator(self) -> str:
+        """Return an unambiguous, credential-free target indicator for the UI."""
+
+        labels = [f"ENV {self.session_policy.environment_label}"]
+        if self.connection_alias:
+            labels.insert(0, f"ALIAS {self.connection_alias}")
+        labels.append(self.session_policy.write_mode_label)
+        return " | ".join(labels)
 
     def on_mount(self) -> None:
         """Show the connection manager as the first visible screen."""

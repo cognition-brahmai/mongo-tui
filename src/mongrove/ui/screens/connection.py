@@ -12,6 +12,7 @@ from textual.screen import Screen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Static
 
 from mongrove.domain.connection import ConnectionInfo, ConnectionProfile
+from mongrove.domain.session import normalize_environment
 from mongrove.services.mongo_gateway import MongoGatewayError, remove_uri_credentials
 from mongrove.services.profile_store import ProfileStoreError
 from mongrove.ui.screens.browser import BrowserScreen
@@ -49,20 +50,25 @@ class ConnectionScreen(Screen[None]):
                     show_row_labels=False,
                 )
                 yield Static(
-                    "Profiles retain endpoints, never URI passwords.",
+                    "Aliases retain endpoints and environments, never URI passwords.",
                     id="profile-help",
                 )
             with Vertical(id="connection-form"):
                 yield Label("CONNECT TO MONGODB", classes="pane-title")
-                yield Label("Connection name", classes="field-label")
-                yield Input(placeholder="Production EU", id="connection-name")
+                yield Label("Connection alias", classes="field-label")
+                yield Input(placeholder="production-eu", id="connection-name")
                 yield Label("MongoDB URI", classes="field-label")
                 yield Input(
                     placeholder="mongodb://localhost:27017",
                     id="uri-input",
                 )
+                yield Label("Environment", classes="field-label")
+                yield Input(
+                    placeholder="development, staging, or production",
+                    id="environment-input",
+                )
                 yield Static(
-                    "Use an environment variable or prompt for sensitive credentials when possible.",
+                    "Production aliases start locally read-only unless --allow-production-writes is explicit.",
                     id="credential-note",
                 )
                 with Horizontal(id="connection-actions"):
@@ -73,6 +79,9 @@ class ConnectionScreen(Screen[None]):
 
     def on_mount(self) -> None:
         self._render_profiles()
+        configured_environment = self.mongrove_app.session_policy.environment
+        if configured_environment:
+            self.query_one("#environment-input", Input).value = configured_environment
         startup_uri = self.mongrove_app.startup_uri
         if startup_uri:
             self.query_one("#uri-input", Input).value = startup_uri
@@ -101,7 +110,11 @@ class ConnectionScreen(Screen[None]):
         profile = self._profiles[event.cursor_row]
         self.query_one("#connection-name", Input).value = profile.name
         self.query_one("#uri-input", Input).value = profile.uri
-        self._set_status(f'Loaded profile "{profile.name}". Credentials are requested separately.')
+        self.query_one("#environment-input", Input).value = profile.environment or ""
+        environment = (profile.environment or "unlabeled").upper()
+        self._set_status(
+            f'Loaded alias "{profile.name}" ({environment}). Credentials are requested separately.'
+        )
 
     def action_connect(self) -> None:
         uri = self.query_one("#uri-input", Input).value.strip()
@@ -109,8 +122,18 @@ class ConnectionScreen(Screen[None]):
             self._set_status("Enter a MongoDB URI before connecting.", error=True)
             self.query_one("#uri-input", Input).focus()
             return
+        try:
+            environment = normalize_environment(
+                self.query_one("#environment-input", Input).value
+            )
+        except ValueError as error:
+            self._set_status(str(error), error=True)
+            self.query_one("#environment-input", Input).focus()
+            return
+        alias = self.query_one("#connection-name", Input).value.strip() or None
+        self.mongrove_app.set_connection_context(alias=alias, environment=environment)
         self._set_connection_controls(disabled=True)
-        self._set_status("Connecting and running a server ping...")
+        self._set_status(f"Connecting to {self.mongrove_app.connection_indicator()}...")
         self._connect(uri)
 
     def action_save_profile(self) -> None:
@@ -124,13 +147,22 @@ class ConnectionScreen(Screen[None]):
             self.query_one("#connection-name", Input).value = name
 
         try:
-            self.mongrove_app.profile_store.save(ConnectionProfile(name=name, uri=uri))
+            environment = normalize_environment(
+                self.query_one("#environment-input", Input).value
+            )
+            self.mongrove_app.profile_store.save(
+                ConnectionProfile(name=name, uri=uri, environment=environment)
+            )
+        except ValueError as error:
+            self._set_status(str(error), error=True)
+            self.query_one("#environment-input", Input).focus()
+            return
         except ProfileStoreError as error:
             self._set_status(str(error), error=True)
             return
 
         self._render_profiles()
-        self._set_status("Profile saved without URI credentials.")
+        self._set_status("Alias saved without URI credentials.")
 
     @work(thread=True, exclusive=True, group="connection", exit_on_error=False)
     def _connect(self, uri: str) -> None:
@@ -160,20 +192,26 @@ class ConnectionScreen(Screen[None]):
             self._set_status(str(error), error=True)
 
         table.clear(columns=True)
-        table.add_columns("Name", "Endpoint")
+        table.add_columns("Alias", "Environment", "Endpoint")
         if not self._profiles:
-            table.add_row("No saved profiles", "Save an endpoint to see it here.")
+            table.add_row("No saved aliases", "", "Save an endpoint to see it here.")
             return
         for profile in self._profiles:
             name = f"* {profile.name}" if profile.favorite else profile.name
-            table.add_row(name, profile.uri, key=profile.name)
+            table.add_row(
+                name,
+                (profile.environment or "unlabeled").upper(),
+                profile.uri,
+                key=profile.name,
+            )
 
     def _select_profile_by_name(self, name: str) -> None:
         for index, profile in enumerate(self._profiles):
             if profile.name.casefold() == name.casefold():
                 self.query_one("#connection-name", Input).value = profile.name
                 self.query_one("#uri-input", Input).value = profile.uri
-                self._set_status(f'Loaded profile "{profile.name}".')
+                self.query_one("#environment-input", Input).value = profile.environment or ""
+                self._set_status(f'Loaded alias "{profile.name}".')
                 self.query_one("#profiles-table", DataTable).move_cursor(row=index)
                 return
         self._set_status(f'No saved profile named "{name}" was found.', error=True)
