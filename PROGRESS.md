@@ -14,7 +14,7 @@ This log records the feature branches merged into `dev`. Each feature is impleme
 | Explain plans | `feature/explain-plans` | Complete |
 | Index management | `feature/index-management` | Complete |
 | Schema sampling | `feature/schema-sampling` | Complete |
-| pipx deployment | `feature/pipx-deployment` | Planned |
+| pipx deployment | `feature/pipx-deployment` | Complete |
 
 ## Log
 
@@ -28,3 +28,4 @@ This log records the feature branches merged into `dev`. Each feature is impleme
 - 2026-09-01: Added planner-only find and aggregation explain views with normalized warnings and raw EJSON fallback on `feature/explain-plans`.
 - 2026-09-01: Added index inventory, explicit usage availability, confirmed creation, and typed-confirmed drop actions on `feature/index-management`.
 - 2026-09-01: Added bounded BSON-aware schema sampling with active-filter support, type distributions, cardinality, null frequency, and examples on `feature/schema-sampling`.
+- 2026-09-01: Added pipx-first installation guidance, complete MIT packaging metadata, and an isolated wheel-install smoke test on `feature/pipx-deployment`.

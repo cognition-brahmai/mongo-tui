@@ -1128,7 +1128,7 @@ Headless tests cannot validate terminal protocols, font widths, clipboard suppor
 
 The first production-capable release must meet all of the following criteria:
 
-- Installable with `pip install mongrove`.
+- Installable with `pipx install mongrove` and `pip install mongrove`.
 - Launchable using `mongrove` and `python -m mongrove`.
 - Fully usable without a mouse.
 - No blocking MongoDB work on the UI thread.
