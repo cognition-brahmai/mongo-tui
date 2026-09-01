@@ -9,10 +9,12 @@ from bson import ObjectId
 
 from mongrove.domain.connection import ConnectionInfo
 from mongrove.domain.namespace import CollectionInfo
+from mongrove.domain.pipeline import AggregationPipeline
 from mongrove.domain.query import FindQuery
 from mongrove.domain.session import SessionPolicy
 from mongrove.services.mongo_gateway import (
     DeleteDocumentResult,
+    AggregationPage,
     DocumentsPage,
     FindStreamResult,
     InsertDocumentResult,
@@ -32,6 +34,7 @@ class FakeGateway:
         self.replace_calls: list[tuple[str, str, Any, dict[str, Any]]] = []
         self.delete_calls: list[tuple[str, str, Any]] = []
         self.stream_calls: list[tuple[str, str, FindQuery]] = []
+        self.aggregation_calls: list[tuple[str, str, AggregationPipeline, int, int]] = []
         self.documents: list[dict[str, Any]] = [
             {
                 "_id": ObjectId("65ba0aa00000000000000001"),
@@ -158,6 +161,28 @@ class FakeGateway:
             consume(deepcopy(document))
             documents_seen += 1
         return FindStreamResult(documents_seen=documents_seen, cancelled=is_cancelled())
+
+    def aggregate_documents(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        page_size: int = 100,
+        max_time_ms: int = 60_000,
+    ) -> AggregationPage:
+        if pipeline.has_write_stage:
+            raise MongoGatewayError("Aggregation write stages are unavailable in FakeGateway.")
+        self.aggregation_calls.append(
+            (database, collection, pipeline, page_size, max_time_ms)
+        )
+        documents = deepcopy(self.documents[: page_size + 1])
+        has_more = len(documents) > page_size
+        return AggregationPage(
+            documents=documents[:page_size],
+            has_more=has_more,
+            elapsed_ms=4,
+        )
 
     @staticmethod
     def _assert_writes_allowed(policy: SessionPolicy) -> None:

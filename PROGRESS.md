@@ -10,7 +10,7 @@ This log records the feature branches merged into `dev`. Each feature is impleme
 | Command palette actions | `feature/command-palette` | Complete |
 | Confirmed document writes | `feature/confirmed-writes` | Complete |
 | Export | `feature/export` | Complete |
-| Aggregation pipeline editor | `feature/aggregation-editor` | Planned |
+| Aggregation pipeline editor | `feature/aggregation-editor` | Complete |
 | Explain plans | `feature/explain-plans` | Planned |
 | Index management | `feature/index-management` | Planned |
 | Schema sampling | `feature/schema-sampling` | Planned |
@@ -24,3 +24,4 @@ This log records the feature branches merged into `dev`. Each feature is impleme
 - 2026-09-01: Added contextual `Ctrl+P` command-palette actions for global controls and every current connection, browser, document, query, history, and modal operation on `feature/command-palette`.
 - 2026-09-01: Added policy-gated, acknowledged single-document insert, replace, and delete workflows with canonical EJSON editors and explicit confirmation on `feature/confirmed-writes`.
 - 2026-09-01: Added atomic, streaming JSON, canonical EJSON, and BSON-safe CSV exports for full active find queries on `feature/export`.
+- 2026-09-01: Added a raw JSON/EJSON aggregation editor with bounded BSON-aware previews and write-stage detection on `feature/aggregation-editor`.
