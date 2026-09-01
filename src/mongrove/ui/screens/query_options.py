@@ -9,6 +9,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static
 
 from mongrove.domain.query import QueryFormState, QueryValidationError, parse_find_query
+from mongrove.ui.commands import CommandAction
 
 
 class QueryOptionsScreen(ModalScreen[QueryFormState | None]):
@@ -47,6 +48,14 @@ class QueryOptionsScreen(ModalScreen[QueryFormState | None]):
             with Horizontal(id="query-options-actions"):
                 yield Button("Cancel", id="cancel-options")
                 yield Button("Apply", id="apply-options", variant="primary")
+
+    def get_command_actions(self) -> tuple[CommandAction, ...]:
+        """Expose query editing actions from the modal palette context."""
+
+        return (
+            CommandAction("Apply query options", "Validate and return the edited options", self.action_apply),
+            CommandAction("Cancel query options", "Discard option edits", self.action_cancel),
+        )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "apply-options":

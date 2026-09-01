@@ -143,7 +143,7 @@ mongrove-paper
 | `[` / `]` | Previous and next query result page. |
 | `Ctrl+T` | Open the theme picker. |
 | `Ctrl+D` | Disconnect. |
-| `Ctrl+P` | Open Textual's command palette. |
+| `Ctrl+P` | Open Mongrove's contextual command palette for the active workspace or modal. |
 | `Ctrl+Q` | Quit Mongrove. |
 | `Esc` | Close the current modal or cancel the current action. |
 

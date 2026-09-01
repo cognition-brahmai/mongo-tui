@@ -15,6 +15,7 @@ from mongrove.domain.connection import ConnectionInfo, ConnectionProfile
 from mongrove.domain.session import normalize_environment
 from mongrove.services.mongo_gateway import MongoGatewayError, remove_uri_credentials
 from mongrove.services.profile_store import ProfileStoreError
+from mongrove.ui.commands import CommandAction
 from mongrove.ui.screens.browser import BrowserScreen
 
 if TYPE_CHECKING:
@@ -91,6 +92,22 @@ class ConnectionScreen(Screen[None]):
         startup_profile = self.mongrove_app.startup_profile
         if startup_profile:
             self._select_profile_by_name(startup_profile)
+
+    def get_command_actions(self) -> tuple[CommandAction, ...]:
+        """Return connection operations available before a workspace opens."""
+
+        return (
+            CommandAction(
+                "Connect to MongoDB",
+                "Test the entered URI and open the workspace",
+                self.action_connect,
+            ),
+            CommandAction(
+                "Save connection alias",
+                "Save the entered credential-free endpoint and environment",
+                self.action_save_profile,
+            ),
+        )
 
     def on_screen_resume(self) -> None:
         if self.mongrove_app.connection_info is None:

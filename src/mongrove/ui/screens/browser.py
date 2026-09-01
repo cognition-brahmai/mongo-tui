@@ -18,6 +18,7 @@ from mongrove.domain.query import FindQuery, QueryFormState, QueryValidationErro
 from mongrove.services.bson_codec import format_cell
 from mongrove.services.mongo_gateway import DocumentsPage, MongoGatewayError
 from mongrove.services.query_history import QueryHistoryEntry, QueryHistoryStoreError
+from mongrove.ui.commands import CommandAction
 from mongrove.ui.screens.document import DocumentScreen
 from mongrove.ui.screens.query_history import QueryHistoryScreen
 from mongrove.ui.screens.query_options import QueryOptionsScreen
@@ -121,6 +122,74 @@ class BrowserScreen(Screen[None]):
             )
         self._load_databases()
 
+    def get_command_actions(self) -> tuple[CommandAction, ...]:
+        """Return only operations meaningful for the active browser context."""
+
+        commands = [
+            CommandAction(
+                "Refresh namespaces",
+                "Reload visible databases and rerun the active query",
+                self.action_refresh,
+            ),
+            CommandAction(
+                "Disconnect from MongoDB",
+                "Close the active client and return to saved aliases",
+                self.action_disconnect,
+            ),
+        ]
+        if self.namespace is None:
+            return tuple(commands)
+        commands.extend(
+            (
+                CommandAction(
+                    "Run query",
+                    "Execute the current filter and query options",
+                    self.action_run_query,
+                ),
+                CommandAction(
+                    "Open query options",
+                    "Edit projection, sort, collation, paging, and max time",
+                    self.action_open_query_options,
+                ),
+            )
+        )
+        if self.mongrove_app.query_history.enabled:
+            commands.append(
+                CommandAction(
+                    "Open query history",
+                    "Search and restore successful queries for this collection",
+                    self.action_open_query_history,
+                )
+            )
+        if self._current_page > 0:
+            commands.append(
+                CommandAction(
+                    "Previous result page",
+                    "Load the preceding bounded result page",
+                    self.action_previous_page,
+                )
+            )
+        if self._has_more:
+            commands.append(
+                CommandAction(
+                    "Next result page",
+                    "Load the next bounded result page",
+                    self.action_next_page,
+                )
+            )
+        if (
+            self._selected_document_index is not None
+            and self._selected_document_index < len(self._documents)
+        ):
+            commands.append(
+                CommandAction(
+                    "Open selected document",
+                    "Inspect the highlighted document as Extended JSON",
+                    self.action_open_selected_document,
+                )
+            )
+        return tuple(commands)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         actions = {
             "run-query": self.action_run_query,
@@ -174,10 +243,22 @@ class BrowserScreen(Screen[None]):
             return
         if not 0 <= event.cursor_row < len(self._documents):
             return
+        self._selected_document_index = event.cursor_row
+        self.action_open_selected_document()
+
+    def action_open_selected_document(self) -> None:
+        """Open the currently highlighted document in the BSON-aware inspector."""
+
         namespace = self.namespace
-        if namespace is None:
+        if (
+            namespace is None
+            or self._selected_document_index is None
+            or not 0 <= self._selected_document_index < len(self._documents)
+        ):
             return
-        self.app.push_screen(DocumentScreen(self._documents[event.cursor_row], namespace))
+        self.app.push_screen(
+            DocumentScreen(self._documents[self._selected_document_index], namespace)
+        )
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         if event.data_table.id != "documents-table":

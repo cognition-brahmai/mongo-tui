@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from pathlib import Path
+from typing import cast
 
-from textual.app import App
+from textual.app import App, SystemCommand
 from textual.binding import Binding
+from textual.screen import Screen
 
 from mongrove.domain.connection import ConnectionInfo
 from mongrove.domain.session import SessionPolicy, normalize_environment
@@ -19,6 +22,7 @@ from mongrove.ui.themes import (
     DEFAULT_THEME,
     get_theme_option,
 )
+from mongrove.ui.commands import CommandAction
 
 
 class MongroveApp(App[None]):
@@ -138,6 +142,29 @@ class MongroveApp(App[None]):
         from mongrove.ui.screens.connection import ConnectionScreen
 
         self.push_screen(ConnectionScreen())
+
+    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+        """Expose global and active-screen operations through Ctrl+P."""
+
+        yield from super().get_system_commands(screen)
+        yield SystemCommand(
+            "Choose Mongrove theme",
+            "Open the curated Mongrove theme picker",
+            self.action_choose_theme,
+        )
+        actions = getattr(screen, "get_command_actions", None)
+        if not callable(actions):
+            return
+        action_provider = cast(Callable[[], Iterable[CommandAction]], actions)
+        for action in action_provider():
+            if not isinstance(action, CommandAction):
+                continue
+            yield SystemCommand(
+                action.title,
+                action.help,
+                action.callback,
+                discover=action.discover,
+            )
 
     def action_choose_theme(self) -> None:
         """Open the curated theme picker from any application screen."""

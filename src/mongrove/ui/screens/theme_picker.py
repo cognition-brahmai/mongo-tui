@@ -10,6 +10,7 @@ from textual.widgets import Button, Label, OptionList, Static
 from textual.widgets.option_list import Option
 
 from mongrove.ui.themes import CURATED_THEME_OPTIONS, get_theme_option
+from mongrove.ui.commands import CommandAction
 
 
 class ThemePickerScreen(ModalScreen[str | None]):
@@ -52,6 +53,11 @@ class ThemePickerScreen(ModalScreen[str | None]):
                 theme_list.highlighted = index
                 theme_list.scroll_to_highlight()
                 break
+
+    def get_command_actions(self) -> tuple[CommandAction, ...]:
+        """Allow palette users to leave the modal without a mouse."""
+
+        return (CommandAction("Cancel theme picker", "Keep the current theme", self.action_cancel),)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_list.id != "theme-list" or event.option.id is None:
