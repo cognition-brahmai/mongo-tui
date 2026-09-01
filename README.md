@@ -9,7 +9,7 @@ It keeps the useful structure of a database GUI inside the terminal: namespaces 
 ## Install
 
 ```bash
-pip install mongrove
+pipx install mongrove
 ```
 
 Launch the workspace:
@@ -17,6 +17,16 @@ Launch the workspace:
 ```bash
 mongrove
 ```
+
+`pipx` keeps Mongrove and its dependencies isolated from the Python used by your server tools. On a fresh SSH host:
+
+```bash
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+pipx install mongrove
+```
+
+Start a new shell after `ensurepath`, then run `mongrove`. No daemon, database-side agent, or local configuration is required before the first connection. If `pipx` is unsuitable for your environment, `python -m pip install --user mongrove` remains supported.
 
 Connect directly to a deployment:
 
@@ -237,6 +247,8 @@ The repository includes a Conda environment at `.conda_env` for development on t
 ```powershell
 .\.conda_env\python.exe -m pip install -e ".[dev]"
 .\.conda_env\python.exe -m pytest -q -p no:cacheprovider
+.\.conda_env\python.exe -m pip install pipx
+.\.conda_env\python.exe scripts/verify_pipx.py
 ```
 
 Run the package directly from source:
@@ -246,5 +258,7 @@ Run the package directly from source:
 ```
 
 The public landing page source lives in [`site/`](site/). It is dependency-free and deploys to [mongrove.oss.brahmai.in](https://mongrove.oss.brahmai.in).
+
+`scripts/verify_pipx.py` builds a wheel, installs it into a temporary isolated `pipx` home, and runs `mongrove --version`. It is the release smoke test; public PyPI publishing remains a separately authenticated release step.
 
 For the complete product, UX, safety, and delivery specification, read [MONGROVE_PLAN.md](MONGROVE_PLAN.md).
