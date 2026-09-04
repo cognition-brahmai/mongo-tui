@@ -5,12 +5,15 @@ from __future__ import annotations
 import pytest
 from textual.widgets import DataTable, Input, Tree
 
-from mongotui.services.profile_store import ProfileStore
-from mongotui.ui.app import MongoTUIApp
-from mongotui.ui.screens.browser import BrowserScreen
-from mongotui.ui.screens.connection import ConnectionScreen
-from mongotui.ui.widgets.document_table import DocumentTable
-from mongotui.ui.widgets.document_viewer import DocumentJsonViewer
+from mongrove.domain.connection import ConnectionProfile
+from mongrove.services.profile_store import ProfileStore
+from mongrove.services.query_history import QueryHistoryStore
+from mongrove.ui.app import MongroveApp
+from mongrove.ui.screens.browser import BrowserScreen
+from mongrove.ui.screens.connection import ConnectionScreen
+from mongrove.ui.screens.query_history import QueryHistoryScreen
+from mongrove.ui.widgets.document_table import DocumentTable
+from mongrove.ui.widgets.document_viewer import DocumentJsonViewer
 
 from tests.conftest import FakeGateway
 
@@ -25,9 +28,10 @@ async def _settle(pilot) -> None:
 @pytest.mark.asyncio
 async def test_connect_then_open_collection_and_query_documents(tmp_path) -> None:
     gateway = FakeGateway()
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=gateway,
         profile_store=ProfileStore(tmp_path / "connections.json"),
+        history_store=QueryHistoryStore(tmp_path / "history.sqlite3"),
     )
 
     async with app.run_test(size=(140, 42)) as pilot:
@@ -56,7 +60,7 @@ async def test_connect_then_open_collection_and_query_documents(tmp_path) -> Non
 
 @pytest.mark.asyncio
 async def test_query_options_validate_before_returning_to_browser(tmp_path) -> None:
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=FakeGateway(),
         profile_store=ProfileStore(tmp_path / "connections.json"),
     )
@@ -83,7 +87,7 @@ async def test_query_options_validate_before_returning_to_browser(tmp_path) -> N
 
 @pytest.mark.asyncio
 async def test_empty_document_table_ignores_header_clicks(tmp_path) -> None:
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=FakeGateway(),
         profile_store=ProfileStore(tmp_path / "connections.json"),
     )
@@ -109,9 +113,10 @@ async def test_empty_document_table_ignores_header_clicks(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_populated_document_table_accepts_header_clicks(tmp_path) -> None:
     gateway = FakeGateway()
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=gateway,
         profile_store=ProfileStore(tmp_path / "connections.json"),
+        history_store=QueryHistoryStore(tmp_path / "history.sqlite3"),
     )
 
     async with app.run_test(size=(140, 42)) as pilot:
@@ -141,7 +146,7 @@ async def test_document_inspector_scrolls_with_keyboard(tmp_path) -> None:
     gateway.documents[0]["large_payload"] = {
         f"field_{index:03}": f"Value {index}" for index in range(100)
     }
-    app = MongoTUIApp(
+    app = MongroveApp(
         gateway=gateway,
         profile_store=ProfileStore(tmp_path / "connections.json"),
     )
@@ -167,3 +172,77 @@ async def test_document_inspector_scrolls_with_keyboard(tmp_path) -> None:
         await pilot.press("pagedown")
         await pilot.pause()
         assert viewer.scroll_y > 0
+
+
+@pytest.mark.asyncio
+async def test_production_alias_is_prominently_guarded_in_the_workspace(tmp_path) -> None:
+    profiles = ProfileStore(tmp_path / "connections.json")
+    profiles.save(
+        ConnectionProfile(
+            name="production-eu",
+            uri="mongodb://db.internal:27017",
+            environment="production",
+        )
+    )
+    app = MongroveApp(
+        gateway=FakeGateway(),
+        profile_store=profiles,
+        startup_profile="production-eu",
+    )
+
+    async with app.run_test(size=(140, 42)) as pilot:
+        connection = app.screen
+        assert isinstance(connection, ConnectionScreen)
+        assert connection.query_one("#environment-input", Input).value == "production"
+        await pilot.press("ctrl+enter")
+        await _settle(pilot)
+
+        assert isinstance(app.screen, BrowserScreen)
+        assert app.read_only is True
+        banner = app.screen.query_one("#connection-banner")
+        assert "ALIAS production-eu" in str(banner.render())
+        assert "ENV PRODUCTION" in str(banner.render())
+        assert "PRODUCTION READ ONLY" in str(banner.render())
+
+
+@pytest.mark.asyncio
+async def test_query_history_restores_a_successful_explicit_find(tmp_path) -> None:
+    history_store = QueryHistoryStore(tmp_path / "history.sqlite3")
+    app = MongroveApp(
+        gateway=FakeGateway(),
+        profile_store=ProfileStore(tmp_path / "connections.json"),
+        history_store=history_store,
+    )
+
+    async with app.run_test(size=(140, 42)) as pilot:
+        connection = app.screen
+        connection.query_one("#uri-input", Input).value = "mongodb://localhost:27017"
+        await pilot.press("ctrl+enter")
+        await _settle(pilot)
+
+        browser = app.screen
+        assert isinstance(browser, BrowserScreen)
+        tree = browser.query_one("#namespace-tree", Tree)
+        app_node = tree.root.children[1]
+        app_node.expand()
+        await _settle(pilot)
+        tree.select_node(app_node.children[0])
+        await _settle(pilot)
+        assert history_store.path.exists() is False
+
+        browser.query_one("#filter-input", Input).value = '{"status": "active"}'
+        await pilot.press("f5")
+        await _settle(pilot)
+        await _settle(pilot)
+        assert history_store.path.exists() is True
+
+        await pilot.press("ctrl+r")
+        await _settle(pilot)
+        assert isinstance(app.screen, QueryHistoryScreen)
+        history = app.screen
+        assert history.query_one("#history-table", DataTable).row_count == 1
+
+        await pilot.press("ctrl+enter")
+        await _settle(pilot)
+        assert app.screen is browser
+        assert browser._query_state.filter_text == '{"status": "active"}'

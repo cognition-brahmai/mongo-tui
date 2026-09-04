@@ -1,0 +1,792 @@
+"""Thread-safe boundary between the Textual UI and PyMongo."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable
+from dataclasses import dataclass
+from time import perf_counter
+from typing import Any, Protocol
+
+from bson.errors import BSONError
+from bson.son import SON
+from pymongo import MongoClient
+from pymongo.collation import Collation
+from pymongo.errors import PyMongoError
+
+from mongrove.domain.connection import ConnectionInfo
+from mongrove.domain.explain import ExplainResult, normalize_aggregation_explain, normalize_find_explain
+from mongrove.domain.index import IndexInfo, IndexUsage, IndexUsageReport
+from mongrove.domain.namespace import CollectionInfo
+from mongrove.domain.pipeline import AggregationPipeline
+from mongrove.domain.query import FindQuery
+from mongrove.domain.session import SessionPolicy
+
+
+class MongoGatewayError(RuntimeError):
+    """A safe, user-facing wrapper for driver errors."""
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentsPage:
+    """A bounded page of documents and the metadata needed by the UI."""
+
+    documents: list[dict[str, Any]]
+    has_more: bool
+    elapsed_ms: int
+    skip: int
+
+
+@dataclass(frozen=True, slots=True)
+class InsertDocumentResult:
+    """Acknowledged result of inserting one document."""
+
+    inserted_id: Any
+
+
+@dataclass(frozen=True, slots=True)
+class ReplaceDocumentResult:
+    """Acknowledged result of replacing one selected document."""
+
+    matched_count: int
+    modified_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteDocumentResult:
+    """Acknowledged result of deleting one selected document."""
+
+    deleted_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class FindStreamResult:
+    """Result metadata for a cursor consumed incrementally by a local sink."""
+
+    documents_seen: int
+    cancelled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationPage:
+    """A bounded aggregation preview and server timing metadata."""
+
+    documents: list[dict[str, Any]]
+    has_more: bool
+    elapsed_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class SchemaSample:
+    """Bounded random sample returned to the pure schema analyzer."""
+
+    documents: list[dict[str, Any]]
+    elapsed_ms: int
+
+
+class MongoGateway(Protocol):
+    """The synchronous API invoked from Textual worker threads."""
+
+    def connect(self, uri: str, *, timeout_ms: int = 10_000) -> ConnectionInfo:
+        """Connect and return basic deployment facts."""
+        ...
+
+    def disconnect(self) -> None:
+        """Close the active client if one exists."""
+        ...
+
+    def list_databases(self) -> list[str]:
+        """List databases accessible to the active client."""
+        ...
+
+    def list_collections(self, database: str) -> list[CollectionInfo]:
+        """List collections and views within one database."""
+        ...
+
+    def fetch_documents(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        page: int,
+        page_size: int,
+    ) -> DocumentsPage:
+        """Fetch one bounded page of documents."""
+        ...
+
+    def insert_document(
+        self,
+        database: str,
+        collection: str,
+        document: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> InsertDocumentResult:
+        """Insert one document under the supplied session write policy."""
+        ...
+
+    def replace_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        replacement: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> ReplaceDocumentResult:
+        """Replace one document selected by its immutable _id."""
+        ...
+
+    def delete_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        *,
+        policy: SessionPolicy,
+    ) -> DeleteDocumentResult:
+        """Delete one document selected by its immutable _id."""
+        ...
+
+    def stream_documents(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        consume: Callable[[dict[str, Any]], None],
+        is_cancelled: Callable[[], bool],
+        batch_size: int = 100,
+    ) -> FindStreamResult:
+        """Stream every document matching a find query without materializing it."""
+        ...
+
+    def aggregate_documents(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        page_size: int = 100,
+        max_time_ms: int = 60_000,
+    ) -> AggregationPage:
+        """Run a bounded read-only aggregation preview."""
+        ...
+
+    def explain_find(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        """Return a planner-only explain for the logical active find query."""
+        ...
+
+    def explain_aggregation(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        """Return a planner-only explain for a read-only aggregation pipeline."""
+        ...
+
+    def list_indexes(self, database: str, collection: str) -> list[IndexInfo]:
+        """List collection index definitions."""
+        ...
+
+    def index_usage(
+        self,
+        database: str,
+        collection: str,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> IndexUsageReport:
+        """Return best-effort node-local $indexStats usage information."""
+        ...
+
+    def create_index(
+        self,
+        database: str,
+        collection: str,
+        keys: list[tuple[str, Any]],
+        options: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> str:
+        """Create one collection index under the supplied session write policy."""
+        ...
+
+    def drop_index(
+        self,
+        database: str,
+        collection: str,
+        name: str,
+        *,
+        policy: SessionPolicy,
+    ) -> None:
+        """Drop one named collection index under the supplied session write policy."""
+        ...
+
+    def sample_documents(
+        self,
+        database: str,
+        collection: str,
+        filter_document: dict[str, Any],
+        *,
+        sample_size: int = 100,
+        max_time_ms: int = 10_000,
+    ) -> SchemaSample:
+        """Return a bounded random sample after applying the active find filter."""
+        ...
+
+
+class PyMongoGateway:
+    """PyMongo implementation used by the production application.
+
+    All public methods are synchronous by design. Textual invokes them from
+    workers, keeping the terminal interface responsive while preserving the
+    familiar PyMongo client API.
+    """
+
+    def __init__(self) -> None:
+        self._client: MongoClient[dict[str, Any]] | None = None
+
+    def connect(self, uri: str, *, timeout_ms: int = 10_000) -> ConnectionInfo:
+        candidate: MongoClient[dict[str, Any]] | None = None
+        try:
+            candidate = MongoClient(
+                uri,
+                serverSelectionTimeoutMS=timeout_ms,
+                connectTimeoutMS=timeout_ms,
+                socketTimeoutMS=timeout_ms,
+            appname="Mongrove",
+            )
+            candidate.admin.command("ping")
+            server_info = candidate.server_info()
+            hello = candidate.admin.command("hello")
+        except (PyMongoError, TypeError, ValueError) as error:
+            if candidate is not None:
+                candidate.close()
+            raise MongoGatewayError(_driver_error_message(error)) from error
+
+        self.disconnect()
+        self._client = candidate
+        topology = _topology_from_hello(hello)
+        return ConnectionInfo(
+            display_uri=redact_connection_uri(uri),
+            server_version=server_info.get("version"),
+            topology=topology,
+            is_writable_primary=bool(hello.get("isWritablePrimary")),
+        )
+
+    def disconnect(self) -> None:
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
+    def list_databases(self) -> list[str]:
+        client = self._require_client()
+        try:
+            return sorted(client.list_database_names(), key=str.casefold)
+        except PyMongoError as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+
+    def list_collections(self, database: str) -> list[CollectionInfo]:
+        client = self._require_client()
+        try:
+            raw_collections = client[database].list_collections()
+            collections = [
+                CollectionInfo(
+                    database=database,
+                    name=entry["name"],
+                    kind=entry.get("type", "collection"),
+                )
+                for entry in raw_collections
+            ]
+            return sorted(collections, key=lambda item: item.name.casefold())
+        except PyMongoError as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+
+    def fetch_documents(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        page: int,
+        page_size: int,
+    ) -> DocumentsPage:
+        client = self._require_client()
+        cursor_skip, fetch_size = query.page_request(page, page_size)
+        if fetch_size == 0:
+            return DocumentsPage([], False, 0, cursor_skip)
+
+        collection_ref = client[database][collection]
+        kwargs: dict[str, Any] = {
+            "skip": cursor_skip,
+            "limit": fetch_size,
+            "max_time_ms": query.max_time_ms,
+        }
+        if query.projection is not None:
+            kwargs["projection"] = query.projection
+        if query.collation is not None:
+            kwargs["collation"] = Collation(**query.collation)
+
+        started = perf_counter()
+        try:
+            cursor = collection_ref.find(query.filter, **kwargs)
+            if query.sort:
+                cursor = cursor.sort(query.sort)
+            documents = list(cursor)
+        except (PyMongoError, ValueError, TypeError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        elapsed_ms = max(round((perf_counter() - started) * 1_000), 0)
+
+        has_more = len(documents) > page_size
+        if has_more:
+            documents = documents[:page_size]
+        return DocumentsPage(documents, has_more, elapsed_ms, cursor_skip)
+
+    def insert_document(
+        self,
+        database: str,
+        collection: str,
+        document: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> InsertDocumentResult:
+        """Insert one document with an acknowledged write concern."""
+
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            result = collection_ref.insert_one(dict(document))
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        return InsertDocumentResult(inserted_id=result.inserted_id)
+
+    def replace_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        replacement: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> ReplaceDocumentResult:
+        """Replace exactly one document using its original immutable _id."""
+
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            result = collection_ref.replace_one(
+                {"_id": original_id},
+                dict(replacement),
+                upsert=False,
+            )
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        return ReplaceDocumentResult(
+            matched_count=result.matched_count,
+            modified_count=result.modified_count,
+        )
+
+    def delete_document(
+        self,
+        database: str,
+        collection: str,
+        original_id: Any,
+        *,
+        policy: SessionPolicy,
+    ) -> DeleteDocumentResult:
+        """Delete exactly one document using its original immutable _id."""
+
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            result = collection_ref.delete_one({"_id": original_id})
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        return DeleteDocumentResult(deleted_count=result.deleted_count)
+
+    def stream_documents(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        consume: Callable[[dict[str, Any]], None],
+        is_cancelled: Callable[[], bool],
+        batch_size: int = 100,
+    ) -> FindStreamResult:
+        """Consume a cursor incrementally while honoring the complete find query."""
+
+        if batch_size < 1:
+            raise ValueError("Stream batch size must be at least one.")
+        if is_cancelled():
+            return FindStreamResult(documents_seen=0, cancelled=True)
+
+        collection_ref = self._require_client()[database][collection]
+        kwargs: dict[str, Any] = {
+            "skip": query.skip,
+            "max_time_ms": query.max_time_ms,
+        }
+        if query.limit is not None:
+            kwargs["limit"] = query.limit
+        if query.projection is not None:
+            kwargs["projection"] = query.projection
+        if query.collation is not None:
+            kwargs["collation"] = Collation(**query.collation)
+
+        cursor: Any = None
+        documents_seen = 0
+        try:
+            cursor = collection_ref.find(query.filter, **kwargs)
+            if query.sort:
+                cursor = cursor.sort(query.sort)
+            cursor = cursor.batch_size(batch_size)
+            for document in cursor:
+                if is_cancelled():
+                    return FindStreamResult(documents_seen=documents_seen, cancelled=True)
+                consume(document)
+                documents_seen += 1
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except PyMongoError:
+                    pass
+        return FindStreamResult(documents_seen=documents_seen, cancelled=is_cancelled())
+
+    def aggregate_documents(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        page_size: int = 100,
+        max_time_ms: int = 60_000,
+    ) -> AggregationPage:
+        """Run a read-only pipeline prefix with a final bounded preview limit."""
+
+        if pipeline.has_write_stage:
+            stages = ", ".join(pipeline.write_stages)
+            raise MongoGatewayError(
+                f"Aggregation write stages are not available in previews: {stages}."
+            )
+        if page_size < 1:
+            raise ValueError("Aggregation preview size must be at least one.")
+        if max_time_ms < 1:
+            raise ValueError("Aggregation max time must be at least one millisecond.")
+        collection_ref = self._require_client()[database][collection]
+        preview_pipeline = [*pipeline.stages, {"$limit": page_size + 1}]
+        cursor: Any = None
+        started = perf_counter()
+        try:
+            cursor = collection_ref.aggregate(
+                preview_pipeline,
+                maxTimeMS=max_time_ms,
+                batchSize=page_size + 1,
+            )
+            documents = list(cursor)
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except PyMongoError:
+                    pass
+        elapsed_ms = max(round((perf_counter() - started) * 1_000), 0)
+        has_more = len(documents) > page_size
+        if has_more:
+            documents = documents[:page_size]
+        return AggregationPage(documents=documents, has_more=has_more, elapsed_ms=elapsed_ms)
+
+    def explain_find(
+        self,
+        database: str,
+        collection: str,
+        query: FindQuery,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        """Use the command API to request a bounded planner-only find explain."""
+
+        if max_time_ms < 1:
+            raise ValueError("Explain max time must be at least one millisecond.")
+        client = self._require_client()
+        collection_ref = client[database][collection]
+        command: dict[str, Any] = SON((("find", collection), ("filter", query.filter)))
+        if query.projection is not None:
+            command["projection"] = query.projection
+        if query.sort:
+            command["sort"] = SON(query.sort)
+        if query.collation is not None:
+            command["collation"] = query.collation
+        if query.skip:
+            command["skip"] = query.skip
+        if query.limit is not None:
+            command["limit"] = query.limit
+        command["maxTimeMS"] = min(query.max_time_ms, max_time_ms)
+        started = perf_counter()
+        try:
+            raw = client[database].command(
+                "explain",
+                command,
+                verbosity="queryPlanner",
+                read_preference=collection_ref.read_preference,
+            )
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        elapsed_ms = max(round((perf_counter() - started) * 1_000), 0)
+        return normalize_find_explain(raw, query, elapsed_ms)
+
+    def explain_aggregation(
+        self,
+        database: str,
+        collection: str,
+        pipeline: AggregationPipeline,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> ExplainResult:
+        """Use the command API to request a planner-only aggregation explain."""
+
+        if pipeline.has_write_stage:
+            stages = ", ".join(pipeline.write_stages)
+            raise MongoGatewayError(
+                f"Aggregation write stages are not available in explains: {stages}."
+            )
+        if max_time_ms < 1:
+            raise ValueError("Explain max time must be at least one millisecond.")
+        client = self._require_client()
+        collection_ref = client[database][collection]
+        command: dict[str, Any] = SON(
+            (
+                ("aggregate", collection),
+                ("pipeline", list(pipeline.stages)),
+                ("cursor", {}),
+                ("maxTimeMS", max_time_ms),
+            )
+        )
+        started = perf_counter()
+        try:
+            raw = client[database].command(
+                "explain",
+                command,
+                verbosity="queryPlanner",
+                read_preference=collection_ref.read_preference,
+            )
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        elapsed_ms = max(round((perf_counter() - started) * 1_000), 0)
+        return normalize_aggregation_explain(raw, pipeline, elapsed_ms)
+
+    def list_indexes(self, database: str, collection: str) -> list[IndexInfo]:
+        """Map PyMongo index documents into stable UI metadata."""
+
+        try:
+            raw_indexes = list(self._require_client()[database][collection].list_indexes())
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        indexes: list[IndexInfo] = []
+        for raw in raw_indexes:
+            name = raw.get("name")
+            keys = raw.get("key")
+            if not isinstance(name, str) or not isinstance(keys, dict):
+                continue
+            indexes.append(
+                IndexInfo(
+                    name=name,
+                    keys=tuple(keys.items()),
+                    unique=bool(raw.get("unique", False)),
+                    sparse=bool(raw.get("sparse", False)),
+                    hidden=bool(raw.get("hidden", False)),
+                    raw=dict(raw),
+                )
+            )
+        return sorted(indexes, key=lambda index: index.name.casefold())
+
+    def index_usage(
+        self,
+        database: str,
+        collection: str,
+        *,
+        max_time_ms: int = 5_000,
+    ) -> IndexUsageReport:
+        """Read $indexStats when permitted without treating unavailable as zero."""
+
+        if max_time_ms < 1:
+            raise ValueError("Index usage max time must be at least one millisecond.")
+        cursor: Any = None
+        try:
+            cursor = self._require_client()[database][collection].aggregate(
+                [{"$indexStats": {}}],
+                maxTimeMS=max_time_ms,
+            )
+            entries = list(cursor)
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            return IndexUsageReport(
+                available=False,
+                message=f"Index usage is unavailable: {_driver_error_message(error)}",
+            )
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except PyMongoError:
+                    pass
+        usages: list[IndexUsage] = []
+        for entry in entries:
+            name = entry.get("name")
+            accesses = entry.get("accesses")
+            if not isinstance(name, str) or not isinstance(accesses, dict):
+                continue
+            operations = accesses.get("ops")
+            since = accesses.get("since")
+            usages.append(
+                IndexUsage(
+                    name=name,
+                    operations=operations if isinstance(operations, int) else None,
+                    since=str(since) if since is not None else None,
+                )
+            )
+        return IndexUsageReport(available=True, usages=tuple(usages))
+
+    def create_index(
+        self,
+        database: str,
+        collection: str,
+        keys: list[tuple[str, Any]],
+        options: dict[str, Any],
+        *,
+        policy: SessionPolicy,
+    ) -> str:
+        """Create one acknowledged index using ordered keys and EJSON options."""
+
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            return collection_ref.create_index(keys, **dict(options))
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+
+    def drop_index(
+        self,
+        database: str,
+        collection: str,
+        name: str,
+        *,
+        policy: SessionPolicy,
+    ) -> None:
+        """Drop exactly one named index with acknowledged write concern."""
+
+        if not name.strip():
+            raise MongoGatewayError("Index name cannot be empty.")
+        collection_ref = self._write_collection(database, collection, policy)
+        try:
+            collection_ref.drop_index(name)
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+
+    def sample_documents(
+        self,
+        database: str,
+        collection: str,
+        filter_document: dict[str, Any],
+        *,
+        sample_size: int = 100,
+        max_time_ms: int = 10_000,
+    ) -> SchemaSample:
+        """Run a bounded $sample aggregation, optionally after an active filter."""
+
+        if not 1 <= sample_size <= 10_000:
+            raise ValueError("Schema sample size must be between 1 and 10000.")
+        if max_time_ms < 1:
+            raise ValueError("Schema sample max time must be at least one millisecond.")
+        pipeline: list[dict[str, Any]] = []
+        if filter_document:
+            pipeline.append({"$match": filter_document})
+        pipeline.append({"$sample": {"size": sample_size}})
+        cursor: Any = None
+        started = perf_counter()
+        try:
+            cursor = self._require_client()[database][collection].aggregate(
+                pipeline,
+                maxTimeMS=max_time_ms,
+                batchSize=sample_size,
+            )
+            documents = list(cursor)
+        except (PyMongoError, BSONError, TypeError, ValueError) as error:
+            raise MongoGatewayError(_driver_error_message(error)) from error
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except PyMongoError:
+                    pass
+        return SchemaSample(
+            documents=documents,
+            elapsed_ms=max(round((perf_counter() - started) * 1_000), 0),
+        )
+
+    def _require_client(self) -> MongoClient[dict[str, Any]]:
+        if self._client is None:
+            raise MongoGatewayError("No active MongoDB connection.")
+        return self._client
+
+    def _write_collection(
+        self,
+        database: str,
+        collection: str,
+        policy: SessionPolicy,
+    ) -> Any:
+        reason = policy.write_block_reason
+        if reason is not None:
+            raise MongoGatewayError(reason)
+        collection_ref = self._require_client()[database][collection]
+        if not collection_ref.write_concern.acknowledged:
+            raise MongoGatewayError(
+                "Mongrove requires acknowledged writes; unacknowledged w=0 writes are unsupported."
+            )
+        return collection_ref
+
+
+_URI_CREDENTIALS = re.compile(r"(mongodb(?:\+srv)?://)([^@/]+)@", re.IGNORECASE)
+
+
+def redact_connection_uri(uri: str) -> str:
+    """Replace URI user information without modifying the target endpoint."""
+
+    return _URI_CREDENTIALS.sub(r"\1***@", uri.strip(), count=1)
+
+
+def remove_uri_credentials(uri: str) -> str:
+    """Return a URI suitable for local profile storage without credentials."""
+
+    return _URI_CREDENTIALS.sub(r"\1", uri.strip(), count=1)
+
+
+def redact_sensitive_text(value: str) -> str:
+    """Remove URI credentials when a driver error embeds a connection string."""
+
+    return _URI_CREDENTIALS.sub(r"\1***@", value)
+
+
+def _topology_from_hello(hello: dict[str, Any]) -> str:
+    if hello.get("msg") == "isdbgrid":
+        return "Sharded cluster"
+    if hello.get("setName"):
+        return "Replica set"
+    return "Standalone"
+
+
+def _driver_error_message(error: Exception) -> str:
+    message = str(error).strip()
+    if not message:
+        return type(error).__name__
+    return redact_sensitive_text(message)

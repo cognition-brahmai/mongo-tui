@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from mongotui.services.profile_store import ProfileStore
-from mongotui.services.settings_store import SettingsStore
-from mongotui.ui.app import MongoTUIApp
-from mongotui.ui.themes import CURATED_THEME_NAMES, DEFAULT_THEME
+from mongrove.services.profile_store import ProfileStore
+from mongrove.services.settings_store import SettingsStore
+from mongrove.ui.app import MongroveApp
+from mongrove.ui.themes import CURATED_THEME_NAMES, DEFAULT_THEME
 
 
 def test_theme_names_are_unique_and_include_the_default() -> None:
@@ -17,25 +17,25 @@ def test_theme_names_are_unique_and_include_the_default() -> None:
 
 def test_app_uses_saved_theme_and_persists_selection(tmp_path) -> None:
     settings = SettingsStore(tmp_path / "settings.json")
-    settings.save_theme("mongotui-ocean")
-    app = MongoTUIApp(
+    settings.save_theme("mongrove-ocean")
+    app = MongroveApp(
         profile_store=ProfileStore(tmp_path / "connections.json"),
         settings_store=settings,
     )
 
-    assert app.theme == "mongotui-ocean"
+    assert app.theme == "mongrove-ocean"
 
-    app.select_theme("mongotui-paper")
+    app.select_theme("mongrove-paper")
 
-    assert app.theme == "mongotui-paper"
-    assert settings.load_theme() == "mongotui-paper"
+    assert app.theme == "mongrove-paper"
+    assert settings.load_theme() == "mongrove-paper"
 
 
 def test_app_rejects_unknown_theme(tmp_path) -> None:
-    app = MongoTUIApp(
+    app = MongroveApp(
         profile_store=ProfileStore(tmp_path / "connections.json"),
         settings_store=SettingsStore(tmp_path / "settings.json"),
     )
 
-    with pytest.raises(ValueError, match="Unsupported MongoTUI theme"):
+    with pytest.raises(ValueError, match="Unsupported Mongrove theme"):
         app.select_theme("not-a-theme")
